@@ -1,0 +1,47 @@
+{
+  "collections": {
+    "users": {
+      "schema": {
+        "uid": { "type": "string", "required": true },
+        "name": { "type": "string", "required": true },
+        "email": { "type": "string", "required": true },
+        "createdAt": { "type": "string", "required": true }
+      }
+    },
+    "jobs": {
+      "schema": {
+        "id": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "company": { "type": "string", "required": true },
+        "department": { "type": "string", "required": true },
+        "location": { "type": "string", "required": true },
+        "type": { "type": "string", "required": true },
+        "salaryRange": { "type": "string", "required": false },
+        "experienceRequired": { "type": "string", "required": true },
+        "educationRequired": { "type": "string", "required": true },
+        "mandatorySkills": { "type": "string", "required": true },
+        "preferredSkills": { "type": "string", "required": false },
+        "description": { "type": "string", "required": true },
+        "responsibilities": { "type": "string", "required": false },
+        "benefits": { "type": "string", "required": false },
+        "createdAt": { "type": "string", "required": true },
+        "analyzedRequirements": { "type": "map", "required": false }
+      }
+    },
+    "candidates": {
+      "schema": {
+        "id": { "type": "string", "required": true },
+        "jobId": { "type": "string", "required": true },
+        "name": { "type": "string", "required": true },
+        "email": { "type": "string", "required": true },
+        "phone": { "type": "string", "required": true },
+        "resumeText": { "type": "string", "required": true },
+        "matchScore": { "type": "number", "required": true },
+        "eligibilityStatus": { "type": "string", "required": true },
+        "notes": { "type": "string", "required": false },
+        "evaluatedAt": { "type": "string", "required": false },
+        "report": { "type": "map", "required": false }
+      }
+    }
+  }
+}
