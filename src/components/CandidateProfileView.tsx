@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { User, Mail, Phone, Calendar, CheckCircle2, XCircle, AlertCircle, Copy, Check, FileText, Send, Save, Cpu, Sparkles, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
+import { User, Mail, Phone, Calendar, CheckCircle2, XCircle, AlertCircle, Copy, Check, FileText, Send, Save, Cpu, Sparkles, MessageSquare, ChevronDown, ChevronUp, Award, BarChart2 } from "lucide-react";
 import { Candidate, Job, EvaluationReport } from "../types";
 
 interface CandidateProfileViewProps {
@@ -54,54 +54,91 @@ export default function CandidateProfileView({ candidate, job, onRunEvaluation, 
   const confidenceScore = report?.hiringRecommendation?.confidence_score || 0;
   const comparativeScore = report?.candidateRanking?.comparative_score || 0;
 
+  const weights = job.criteriaWeights || {
+    skillsWeight: 30,
+    experienceWeight: 25,
+    educationWeight: 20,
+    softSkillsWeight: 15,
+    bonusWeight: 10,
+  };
+
+  const weightedScore = report?.weightedCriteriaScore || {
+    skillsScore: Math.round((skillMatch / 100) * (weights.skillsWeight ?? 30)),
+    skillsMax: weights.skillsWeight ?? 30,
+    experienceScore: Math.round((experienceScore / 100) * (weights.experienceWeight ?? 25)),
+    experienceMax: weights.experienceWeight ?? 25,
+    educationScore: report?.eligibilityReport?.status === "Eligible" ? (weights.educationWeight ?? 20) : Math.round((weights.educationWeight ?? 20) * 0.4),
+    educationMax: weights.educationWeight ?? 20,
+    softSkillsScore: Math.round(((report?.cultureFitEvaluation?.score || 85) / 100) * (weights.softSkillsWeight ?? 15)),
+    softSkillsMax: weights.softSkillsWeight ?? 15,
+    bonusScore: Math.min(weights.bonusWeight ?? 10, report?.extraAttributesEvaluation?.score_bonus_awarded || 0),
+    bonusMax: weights.bonusWeight ?? 10,
+    totalScore: 0,
+    maxTotalScore: 0,
+    grade: "A" as const,
+  };
+
+  const totalScoreVal = weightedScore.totalScore || (weightedScore.skillsScore + weightedScore.experienceScore + weightedScore.educationScore + weightedScore.softSkillsScore + weightedScore.bonusScore);
+  const maxTotalVal = weightedScore.maxTotalScore || (weightedScore.skillsMax + weightedScore.experienceMax + weightedScore.educationMax + weightedScore.softSkillsMax + weightedScore.bonusMax);
+  const totalPct = maxTotalVal > 0 ? Math.round((totalScoreVal / maxTotalVal) * 100) : 0;
+
+  let candidateGrade = weightedScore.grade || "B";
+  if (!weightedScore.grade) {
+    if (totalPct >= 92) candidateGrade = "S";
+    else if (totalPct >= 82) candidateGrade = "A";
+    else if (totalPct >= 72) candidateGrade = "B";
+    else if (totalPct >= 62) candidateGrade = "C";
+    else candidateGrade = "F";
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in text-left">
       {/* Left Column: Candidate Core Card & Notes (Cols 4) */}
       <div className="lg:col-span-4 space-y-6">
         {/* Core Metadata Card */}
-        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 space-y-5">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-2xl p-5 space-y-5">
           <div className="flex items-center space-x-3">
-            <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600">
+            <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl text-indigo-600 dark:text-indigo-400">
               <User className="w-6 h-6" />
             </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 tracking-tight font-display">{candidate.name}</h2>
-              <p className="text-xs text-indigo-600 font-mono font-bold mt-0.5">{job.title}</p>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight font-display truncate">{candidate.name}</h2>
+              <p className="text-xs text-indigo-600 dark:text-indigo-400 font-mono font-bold mt-0.5 truncate">{job.title}</p>
             </div>
           </div>
 
-          <div className="space-y-2.5 border-t border-slate-100 pt-4 text-xs font-semibold text-slate-500">
-            <div className="flex items-center gap-2">
-              <Mail className="w-3.5 h-3.5 text-slate-400" />
-              <span className="truncate text-slate-700 font-mono">{candidate.email}</span>
+          <div className="space-y-2.5 border-t border-slate-100 dark:border-slate-800 pt-4 text-xs font-semibold text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-2 min-w-0">
+              <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="truncate text-slate-700 dark:text-slate-200 font-mono">{candidate.email}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Phone className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-slate-700 font-mono">{candidate.phone}</span>
+            <div className="flex items-center gap-2 min-w-0">
+              <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="text-slate-700 dark:text-slate-200 font-mono truncate">{candidate.phone}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-              <span>Target: <span className="text-slate-800 font-extrabold">{job.company}</span></span>
+            <div className="flex items-center gap-2 min-w-0">
+              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="truncate">Target: <span className="text-slate-800 dark:text-slate-100 font-extrabold">{job.company}</span></span>
             </div>
           </div>
 
           {/* Status Display */}
-          <div className="border-t border-slate-100 pt-4 space-y-3">
+          <div className="border-t border-slate-100 dark:border-slate-800 pt-4 space-y-3">
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Compliance</span>
               {candidate.eligibilityStatus === "Pending" ? (
-                <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-2.5 py-0.5 rounded-full border border-slate-200">PENDING</span>
+                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 font-bold px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">PENDING</span>
               ) : candidate.eligibilityStatus === "Eligible" ? (
-                <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2.5 py-0.5 rounded-full border border-emerald-100">ELIGIBLE</span>
+                <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold px-2.5 py-0.5 rounded-full border border-emerald-100 dark:border-emerald-900/40">ELIGIBLE</span>
               ) : (
-                <span className="text-[10px] bg-rose-50 text-rose-700 font-bold px-2.5 py-0.5 rounded-full border border-rose-100">REJECTED</span>
+                <span className="text-[10px] bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-bold px-2.5 py-0.5 rounded-full border border-rose-100 dark:border-rose-900/40">REJECTED</span>
               )}
             </div>
 
             {report?.hiringRecommendation && (
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Match Rating</span>
-                <span className="text-base font-extrabold text-indigo-600 font-mono">
+                <span className="text-base font-extrabold text-indigo-600 dark:text-indigo-400 font-mono">
                   {report.hiringRecommendation.match_score}%
                 </span>
               </div>
@@ -122,12 +159,12 @@ export default function CandidateProfileView({ candidate, job, onRunEvaluation, 
         </div>
 
         {/* Notes Form */}
-        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 space-y-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-2xl p-5 space-y-4">
           <div className="space-y-1">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5 font-display">
-              <FileText className="w-4 h-4 text-indigo-600" /> Recruiter Audit Notes
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5 font-display">
+              <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Recruiter Audit Notes
             </h3>
-            <p className="text-[10px] text-slate-400">Add custom screening comments or interviewing schedules manually.</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500">Add custom screening comments or interviewing schedules manually.</p>
           </div>
 
           <textarea
@@ -135,19 +172,19 @@ export default function CandidateProfileView({ candidate, job, onRunEvaluation, 
             value={recruiterNotes}
             onChange={(e) => setRecruiterNotes(e.target.value)}
             placeholder="Add notes..."
-            className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg p-2.5 text-xs text-slate-700 focus:outline-none transition leading-relaxed shadow-sm font-sans"
+            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg p-2.5 text-xs text-slate-700 dark:text-slate-200 focus:outline-none transition leading-relaxed shadow-sm font-sans"
           />
 
           <button
             onClick={handleSaveNotes}
-            className="w-full py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
+            className="w-full py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
           >
-            <Save className="w-3.5 h-3.5 text-slate-500" />
+            <Save className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
             <span>Save Recruiter Notes</span>
           </button>
 
           {notesSaveSuccess && (
-            <div className="text-[11px] text-emerald-600 bg-emerald-50 border border-emerald-150 py-2 px-3 rounded-xl text-center font-bold animate-fade-in flex items-center justify-center gap-1.5 shadow-sm">
+            <div className="text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-150 dark:border-emerald-900/40 py-2 px-3 rounded-xl text-center font-bold animate-fade-in flex items-center justify-center gap-1.5 shadow-sm">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
               <span>Notes updated and synced!</span>
             </div>
@@ -156,7 +193,7 @@ export default function CandidateProfileView({ candidate, job, onRunEvaluation, 
       </div>
 
       {/* Right Column: Multi-Agent Assessment Console (Cols 8) */}
-      <div className="lg:col-span-8 bg-white border border-slate-200 shadow-sm rounded-2xl p-6 min-h-[500px] flex flex-col justify-between">
+      <div className="lg:col-span-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-2xl p-6 min-h-[500px] flex flex-col justify-between min-w-0">
         {candidate.eligibilityStatus === "Pending" ? (
           // Pending Screen
           <div className="flex flex-col items-center justify-center flex-1 space-y-4 py-16 text-center">
@@ -289,6 +326,141 @@ export default function CandidateProfileView({ candidate, job, onRunEvaluation, 
                         <p className="text-xs text-slate-600 leading-relaxed font-medium">
                           {report.eligibilityReport.reason}
                         </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Intelligent Criteria Requirement Marks Matrix Card */}
+                  {report.eligibilityReport.status === "Eligible" && (
+                    <div className="bg-slate-900 border border-slate-800 text-white rounded-2xl p-5 shadow-md space-y-4">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Award className="w-5 h-5 text-indigo-400" />
+                            <h3 className="text-sm font-bold text-white tracking-tight font-display">
+                              Weighted Requirement Marks Scorecard
+                            </h3>
+                            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                              candidateGrade === 'S' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' :
+                              candidateGrade === 'A' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' :
+                              candidateGrade === 'B' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' :
+                              'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                            }`}>
+                              Grade {candidateGrade}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400">
+                            Evaluated against recruiter's custom assigned criteria marks for this job advertisement
+                          </p>
+                        </div>
+
+                        <div className="bg-indigo-950/80 border border-indigo-800/80 px-3.5 py-2 rounded-xl text-right shrink-0">
+                          <span className="text-xs font-mono text-slate-400 font-medium">Awarded Marks: </span>
+                          <span className="text-lg font-mono font-extrabold text-indigo-300">
+                            {totalScoreVal} <span className="text-xs text-slate-400">/ {maxTotalVal}</span>
+                          </span>
+                          <div className="text-[10px] font-mono text-emerald-400 font-bold">
+                            ({totalPct}% Cumulative Score)
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 5 Marks Breakdown Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {/* Skills */}
+                        <div className="bg-slate-800/70 border border-slate-700/80 p-3 rounded-xl space-y-1.5">
+                          <div className="flex justify-between items-center text-xs font-semibold text-slate-300">
+                            <span>Skills Criteria</span>
+                            <span className="font-mono font-bold text-indigo-300">
+                              {weightedScore.skillsScore} / {weightedScore.skillsMax} Marks
+                            </span>
+                          </div>
+                          <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                              style={{ width: `${weightedScore.skillsMax > 0 ? (weightedScore.skillsScore / weightedScore.skillsMax) * 100 : 0}%` }}
+                            />
+                          </div>
+                          <p className="text-[9px] text-slate-400 font-mono">
+                            {Math.round(weightedScore.skillsMax > 0 ? (weightedScore.skillsScore / weightedScore.skillsMax) * 100 : 0)}% Section Score
+                          </p>
+                        </div>
+
+                        {/* Experience */}
+                        <div className="bg-slate-800/70 border border-slate-700/80 p-3 rounded-xl space-y-1.5">
+                          <div className="flex justify-between items-center text-xs font-semibold text-slate-300">
+                            <span>Experience Criteria</span>
+                            <span className="font-mono font-bold text-teal-300">
+                              {weightedScore.experienceScore} / {weightedScore.experienceMax} Marks
+                            </span>
+                          </div>
+                          <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-teal-500 rounded-full transition-all duration-500"
+                              style={{ width: `${weightedScore.experienceMax > 0 ? (weightedScore.experienceScore / weightedScore.experienceMax) * 100 : 0}%` }}
+                            />
+                          </div>
+                          <p className="text-[9px] text-slate-400 font-mono">
+                            {Math.round(weightedScore.experienceMax > 0 ? (weightedScore.experienceScore / weightedScore.experienceMax) * 100 : 0)}% Section Score
+                          </p>
+                        </div>
+
+                        {/* Education */}
+                        <div className="bg-slate-800/70 border border-slate-700/80 p-3 rounded-xl space-y-1.5">
+                          <div className="flex justify-between items-center text-xs font-semibold text-slate-300">
+                            <span>Education Criteria</span>
+                            <span className="font-mono font-bold text-blue-300">
+                              {weightedScore.educationScore} / {weightedScore.educationMax} Marks
+                            </span>
+                          </div>
+                          <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                              style={{ width: `${weightedScore.educationMax > 0 ? (weightedScore.educationScore / weightedScore.educationMax) * 100 : 0}%` }}
+                            />
+                          </div>
+                          <p className="text-[9px] text-slate-400 font-mono">
+                            {Math.round(weightedScore.educationMax > 0 ? (weightedScore.educationScore / weightedScore.educationMax) * 100 : 0)}% Section Score
+                          </p>
+                        </div>
+
+                        {/* Culture & Soft Skills */}
+                        <div className="bg-slate-800/70 border border-slate-700/80 p-3 rounded-xl space-y-1.5">
+                          <div className="flex justify-between items-center text-xs font-semibold text-slate-300">
+                            <span>Culture & Soft Skills</span>
+                            <span className="font-mono font-bold text-purple-300">
+                              {weightedScore.softSkillsScore} / {weightedScore.softSkillsMax} Marks
+                            </span>
+                          </div>
+                          <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-purple-500 rounded-full transition-all duration-500"
+                              style={{ width: `${weightedScore.softSkillsMax > 0 ? (weightedScore.softSkillsScore / weightedScore.softSkillsMax) * 100 : 0}%` }}
+                            />
+                          </div>
+                          <p className="text-[9px] text-slate-400 font-mono">
+                            {Math.round(weightedScore.softSkillsMax > 0 ? (weightedScore.softSkillsScore / weightedScore.softSkillsMax) * 100 : 0)}% Section Score
+                          </p>
+                        </div>
+
+                        {/* Bonus Attributes */}
+                        <div className="bg-slate-800/70 border border-slate-700/80 p-3 rounded-xl space-y-1.5">
+                          <div className="flex justify-between items-center text-xs font-semibold text-slate-300">
+                            <span>Bonus Attributes</span>
+                            <span className="font-mono font-bold text-amber-300">
+                              {weightedScore.bonusScore} / {weightedScore.bonusMax} Marks
+                            </span>
+                          </div>
+                          <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-amber-500 rounded-full transition-all duration-500"
+                              style={{ width: `${weightedScore.bonusMax > 0 ? (weightedScore.bonusScore / weightedScore.bonusMax) * 100 : 0}%` }}
+                            />
+                          </div>
+                          <p className="text-[9px] text-slate-400 font-mono">
+                            {Math.round(weightedScore.bonusMax > 0 ? (weightedScore.bonusScore / weightedScore.bonusMax) * 100 : 0)}% Section Score
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}

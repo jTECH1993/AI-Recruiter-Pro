@@ -22,9 +22,9 @@ const SYSTEM_INSTRUCTION_CORE = "You are an elite, highly precise HR recruitment
 async function queryGroq(systemInstruction: string, prompt: string, jsonMode = false): Promise<string> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    throw new Error("GROQ_API_KEY environment variable is required to run the multi-agent evaluations. Please configure it in your environment variables/secrets panel.");
+    throw new Error("GROQ_API_KEY environment variable is missing.");
   }
-  const model = "llama-3.3-70b-versatile"; // A powerful model for reasoning and complex structured extraction
+  const model = "llama-3.3-70b-versatile";
 
   const headers: Record<string, string> = {
     "Authorization": `Bearer ${apiKey}`,
@@ -60,12 +60,58 @@ async function queryGroq(systemInstruction: string, prompt: string, jsonMode = f
   return content.trim();
 }
 
+// Unified multi-provider query function (Groq LLM primary, Gemini fallback)
+async function queryAI(systemInstruction: string, prompt: string, jsonMode = false): Promise<string> {
+  // 1. Try Groq if key is present
+  if (process.env.GROQ_API_KEY) {
+    try {
+      const res = await queryGroq(systemInstruction, prompt, jsonMode);
+      if (res && res.trim().length > 0) return res.trim();
+    } catch (e) {
+      console.warn("Groq LLM query error, checking fallbacks...", e);
+    }
+  }
+
+  // 2. Try Gemini if key is present
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const fullPrompt = `${systemInstruction}\n\n${prompt}${jsonMode ? "\n\nCRITICAL: You MUST respond with a valid JSON object strictly matching the schema." : ""}`;
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: fullPrompt,
+        config: jsonMode ? { responseMimeType: "application/json" } : undefined
+      });
+      if (response.text && response.text.trim().length > 0) {
+        return response.text.trim();
+      }
+    } catch (e) {
+      console.warn("Gemini LLM query error:", e);
+    }
+  }
+
+  throw new Error("No AI API key available or AI services failed.");
+}
+
 function parseJSONSafely(text: string): any {
+  if (!text) return {};
   let cleaned = text.trim();
   if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```json\s*/i, "").replace(/```$/, "");
+    cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/, "").trim();
   }
-  return JSON.parse(cleaned.trim());
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch (err2) {
+        console.error("Failed regex JSON parse:", err2);
+      }
+    }
+    return {};
+  }
 }
 
 // --- API ENDPOINTS ---
@@ -75,34 +121,214 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", aiInitialized: !!GROQ_API_KEY });
 });
 
-// 2. Improve Job Description
+// Helper for local smart AI text refinement and typo/spelling correction
+function generateFallbackText(title: string, company: string, field: string, inputText: string, requirements: string): string {
+  const cleanInput = (inputText || "").trim();
+  const techStack = requirements ? requirements : "modern software technologies";
+  const jobTitle = title || "Position";
+  const compName = company || "our company";
+
+  if (field === "description") {
+    if (!cleanInput || cleanInput.length < 5 || cleanInput.toUpperCase() === "XCS") {
+      return `We are seeking a talented and driven ${jobTitle} to join our engineering team at ${compName}. In this key role, you will drive product innovation, leverage ${techStack}, and collaborate with cross-functional teams to build high-performance, scalable systems. We foster a collaborative culture focused on continuous technical growth, excellence, and proactive problem-solving.`;
+    }
+    let cleaned = cleanInput
+      .replace(/\bdev\b/gi, "developer")
+      .replace(/\bcomms\b/gi, "communication skills")
+      .replace(/\bins\b/gi, "insurance")
+      .replace(/\b401k\b/gi, "401(k) matching")
+      .replace(/\bexp\b/gi, "experience")
+      .replace(/\breq\b/gi, "required")
+      .replace(/\bsr\b/gi, "Senior")
+      .replace(/\bjr\b/gi, "Junior");
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    return `${compName} is looking for a highly skilled ${jobTitle} to join our dynamic team. ${cleaned}. The ideal candidate brings strong expertise in ${techStack} and a passionate commitment to software craftsmanship.`;
+  }
+
+  if (field === "responsibilities") {
+    if (!cleanInput || cleanInput.length < 5) {
+      return `• Architect, develop, and maintain high-performance software applications for the ${jobTitle} position using ${techStack}.\n• Collaborate closely with product managers, design leads, and engineering teams to translate business needs into technical solutions.\n• Conduct comprehensive peer code reviews, enforce strict engineering standards, and optimize system performance.\n• Identify technical debt, troubleshoot production issues, and implement automated testing pipelines.`;
+    }
+    const parts = cleanInput.split(/\n|,|;/).map(p => p.trim()).filter(Boolean);
+    return parts.map(p => {
+      let lineClean = p.replace(/^[•\-\*\d\.\s]+/, "")
+        .replace(/\bdev\b/gi, "develop")
+        .replace(/\bfix bugs\b/gi, "troubleshoot and fix production bugs")
+        .replace(/\bcode review\b/gi, "conduct thorough peer code reviews")
+        .replace(/\bbuild api\b/gi, "design and deploy RESTful APIs and microservices");
+      lineClean = lineClean.charAt(0).toUpperCase() + lineClean.slice(1);
+      return `• ${lineClean}`;
+    }).join("\n");
+  }
+
+  if (field === "benefits") {
+    if (!cleanInput || cleanInput.length < 5) {
+      return `• Competitive base salary accompanied by annual performance bonus opportunities.\n• Comprehensive health, dental, and vision insurance coverage for you and your dependents.\n• Flexible remote and hybrid working options with an annual home-office equipment stipend.\n• 401(k) retirement plan with generous employer matching and unlimited paid time off (PTO).`;
+    }
+    const parts = cleanInput.split(/\n|,|;/).map(p => p.trim()).filter(Boolean);
+    return parts.map(p => {
+      let lineClean = p.replace(/^[•\-\*\d\.\s]+/, "")
+        .replace(/\bhealth ins\b/gi, "Comprehensive health, dental, and vision insurance")
+        .replace(/\bfree lunch\b/gi, "Catered daily lunches and stocked kitchen perks")
+        .replace(/\b401k\b/gi, "401(k) retirement plan with employer match")
+        .replace(/\bpto\b/gi, "Generous paid time off (PTO) and company holidays");
+      lineClean = lineClean.charAt(0).toUpperCase() + lineClean.slice(1);
+      return `• ${lineClean}`;
+    }).join("\n");
+  }
+
+  return cleanInput;
+}
+
+// 2. Improve Job Posting (Description, Responsibilities, Benefits, or All)
 app.post("/api/improve-job", async (req, res) => {
-  const { title, company, description, requirements } = req.body;
+  const {
+    title,
+    company,
+    department = "",
+    location = "",
+    type = "",
+    salaryRange = "",
+    experienceRequired = "",
+    educationRequired = "",
+    field = "description",
+    text = "",
+    description = "",
+    responsibilities = "",
+    benefits = "",
+    requirements = "",
+    preferredSkills = "",
+  } = req.body;
+
+  const jobTitle = title || "Position";
+  const compName = company || "our company";
+  const sysInst = "You are an expert HR Recruitment Copywriter powered by Groq Llama AI. Your goal is to fix all spelling mistakes, grammar errors, typos, and poor phrasing in input text, and transform role requirements into polished, professional, compelling HR job posting content.";
 
   try {
-    const prompt = `You are a professional Recruitment Copywriter. Improve and restructure the following job posting to make it compelling, clear, and professional. Ensure you highlight responsibilities, mandatory skills, preferred skills, benefits, and experience. Do not change the original core details, but elevate the language.
+    if (field === "description") {
+      const inputText = text || description;
+      const prompt = `Fix all spelling mistakes, typos, and grammar errors in the text below. Refine and expand it into a professional, attractive Job Overview paragraph for a ${jobTitle} role at ${compName}.
+Role Category: ${department || "General"}
+Location: ${location || "Not specified"}
+Employment Type: ${type || "Full-time"}
+Mandatory Skills/Stack: ${requirements || "Software Engineering"}
+Preferred Skills: ${preferredSkills || "None"}
 
-Job Title: ${title}
-Company: ${company}
-Current Description:
-${description}
+Original Input:
+"${inputText}"
 
-Current Requirements:
-${requirements}`;
+Return ONLY the polished Job Overview paragraph text without introductory text or markdown formatting headers.`;
 
-    const text = await queryGroq(
-      "You are an elite professional HR copywriter. Format your output nicely using markdown.",
-      prompt,
-      false
-    );
+      let improvedText = "";
+      try {
+        improvedText = await queryAI(sysInst, prompt, false);
+      } catch (e) {
+        improvedText = generateFallbackText(jobTitle, compName, field, inputText, requirements);
+      }
+      return res.json({ success: true, field: "description", improvedText });
+    }
 
-    res.json({ success: true, improvedText: text });
-  } catch (error: any) {
-    console.error("Error in /api/improve-job with Groq:", error);
-    // Simulation fallback if Groq API error
-    res.json({
+    if (field === "responsibilities") {
+      const inputText = text || responsibilities;
+      const prompt = `Fix all spelling mistakes, typos, and grammar errors in the text below. Refine and format it into clean, action-oriented bullet points (starting each with •) describing key job responsibilities for a ${jobTitle} at ${compName}.
+Tech Stack & Requirements: ${requirements || "Software Engineering"} | ${preferredSkills || ""}
+
+Original Input:
+"${inputText}"
+
+Return ONLY the bulleted list of responsibilities.`;
+
+      let improvedText = "";
+      try {
+        improvedText = await queryAI(sysInst, prompt, false);
+      } catch (e) {
+        improvedText = generateFallbackText(jobTitle, compName, field, inputText, requirements);
+      }
+      return res.json({ success: true, field: "responsibilities", improvedText });
+    }
+
+    if (field === "benefits") {
+      const inputText = text || benefits;
+      const prompt = `Fix all spelling mistakes, typos, and grammar errors in the text below. Refine and format it into clean, attractive bullet points (starting each with •) listing employee perks, salary compensation context (${salaryRange || "competitive"}), and benefits for ${compName}.
+
+Original Input:
+"${inputText}"
+
+Return ONLY the bulleted list of benefits.`;
+
+      let improvedText = "";
+      try {
+        improvedText = await queryAI(sysInst, prompt, false);
+      } catch (e) {
+        improvedText = generateFallbackText(jobTitle, compName, field, inputText, requirements);
+      }
+      return res.json({ success: true, field: "benefits", improvedText });
+    }
+
+    if (field === "all") {
+      const prompt = `You are an elite HR Recruitment Copywriter powered by Groq Llama 3.3.
+Job Title: ${jobTitle}
+Company: ${compName}
+Department / Category: ${department || "General"}
+Location: ${location || "Not specified"}
+Employment Type: ${type || "Full-time"}
+Salary / Compensation: ${salaryRange || "Competitive"}
+Required Experience: ${experienceRequired || "Not specified"}
+Required Education: ${educationRequired || "Not specified"}
+Mandatory Skills: ${requirements || "Not specified"}
+Preferred Skills: ${preferredSkills || "Not specified"}
+
+Current Drafts or Notes provided by user (fix any spelling mistakes, typos, or poor phrasing if provided):
+- Description Draft: "${description || "None - generate professional overview based on role and stack"}"
+- Responsibilities Draft: "${responsibilities || "None - generate 4-5 key responsibilities based on role and stack"}"
+- Benefits Draft: "${benefits || "None - generate 4 competitive company perks and benefits"}"
+
+Instructions:
+1. Generate or refine a professional, attractive, high-converting Job Overview Description paragraph.
+2. Generate or refine key Job Responsibilities as clean bullet points starting each with "• ".
+3. Generate or refine Key Benefits & Perks as clean bullet points starting each with "• ".
+
+Return ONLY a JSON object with this exact schema:
+{
+  "improvedDescription": "polished description overview text fixing all typos or generating new text",
+  "improvedResponsibilities": "bulleted responsibilities list (each line starting with •)",
+  "improvedBenefits": "bulleted benefits list (each line starting with •)"
+}`;
+
+      let resultObj: any = {};
+      try {
+        const rawJson = await queryAI(sysInst, prompt, true);
+        resultObj = parseJSONSafely(rawJson);
+      } catch (e) {
+        console.warn("AI query failed for all fields, using fallback:", e);
+      }
+
+      const improvedDescription = resultObj.improvedDescription || resultObj.description || generateFallbackText(jobTitle, compName, "description", description, requirements);
+      const improvedResponsibilities = resultObj.improvedResponsibilities || resultObj.responsibilities || generateFallbackText(jobTitle, compName, "responsibilities", responsibilities, requirements);
+      const improvedBenefits = resultObj.improvedBenefits || resultObj.benefits || generateFallbackText(jobTitle, compName, "benefits", benefits, requirements);
+
+      return res.json({
+        success: true,
+        field: "all",
+        improvedDescription,
+        improvedResponsibilities,
+        improvedBenefits,
+      });
+    }
+
+    return res.json({
       success: true,
-      improvedText: `[SIMULATION FALLBACK] Here is an improved version of the description for ${title} at ${company}:\n\n${description}\n\nKey Requirements:\n${requirements}`,
+      improvedText: generateFallbackText(jobTitle, compName, "description", description, requirements)
+    });
+  } catch (error: any) {
+    console.error("Error in /api/improve-job:", error);
+    return res.json({
+      success: true,
+      field,
+      improvedText: generateFallbackText(jobTitle, compName, field, text || description, requirements),
+      improvedDescription: generateFallbackText(jobTitle, compName, "description", description, requirements),
+      improvedResponsibilities: generateFallbackText(jobTitle, compName, "responsibilities", responsibilities, requirements),
+      improvedBenefits: generateFallbackText(jobTitle, compName, "benefits", benefits, requirements),
     });
   }
 });
@@ -163,6 +389,71 @@ Analyze the fields carefully to establish a set of strict constraints (mandatory
     });
   }
 });
+
+// Helper to calculate weighted marks allocation based on recruiter's defined criteria weights
+function computeWeightedCriteriaScore(
+  job: any,
+  skillMatching: any,
+  experienceEvaluation: any,
+  eligibilityReport: any,
+  cultureFitEvaluation: any,
+  extraAttributesEvaluation: any
+) {
+  const weights = job.criteriaWeights || {
+    skillsWeight: 30,
+    experienceWeight: 25,
+    educationWeight: 20,
+    softSkillsWeight: 15,
+    bonusWeight: 10,
+  };
+
+  const skillsMax = Number(weights.skillsWeight) || 30;
+  const experienceMax = Number(weights.experienceWeight) || 25;
+  const educationMax = Number(weights.educationWeight) || 20;
+  const softSkillsMax = Number(weights.softSkillsWeight) || 15;
+  const bonusMax = Number(weights.bonusWeight) || 10;
+
+  const skillPct = skillMatching?.match_percentage || 0;
+  const skillsScore = Math.round((skillPct / 100) * skillsMax);
+
+  const expPct = experienceEvaluation?.score || 0;
+  const experienceScore = Math.round((expPct / 100) * experienceMax);
+
+  const isEduEligible = eligibilityReport?.status === "Eligible";
+  const educationScore = isEduEligible ? educationMax : Math.round(educationMax * 0.4);
+
+  const softPct = cultureFitEvaluation?.score || 80;
+  const softSkillsScore = Math.round((softPct / 100) * softSkillsMax);
+
+  const rawBonus = extraAttributesEvaluation?.score_bonus_awarded || 0;
+  const bonusScore = Math.min(bonusMax, rawBonus);
+
+  const totalScore = skillsScore + experienceScore + educationScore + softSkillsScore + bonusScore;
+  const maxTotalScore = skillsMax + experienceMax + educationMax + softSkillsMax + bonusMax;
+
+  const pct = maxTotalScore > 0 ? (totalScore / maxTotalScore) * 100 : 0;
+  let grade: "S" | "A" | "B" | "C" | "F" = "F";
+  if (pct >= 92) grade = "S";
+  else if (pct >= 82) grade = "A";
+  else if (pct >= 72) grade = "B";
+  else if (pct >= 62) grade = "C";
+
+  return {
+    skillsScore,
+    skillsMax,
+    experienceScore,
+    experienceMax,
+    educationScore,
+    educationMax,
+    softSkillsScore,
+    softSkillsMax,
+    bonusScore,
+    bonusMax,
+    totalScore,
+    maxTotalScore,
+    grade,
+  };
+}
 
 // 4. Multi-Agent Recruitment Pipeline (Agents 2 to 9)
 app.post("/api/evaluate-candidate", async (req, res) => {
@@ -487,6 +778,15 @@ Output a JSON object with this exact schema:
 
     console.log("Multi-Agent evaluation pipeline completed successfully using Groq!");
 
+    const weightedCriteriaScore = computeWeightedCriteriaScore(
+      job,
+      skillMatching,
+      experienceEvaluation,
+      eligibilityReport,
+      cultureFitEvaluation,
+      extraAttributesEvaluation
+    );
+
     res.json({
       success: true,
       parsedResume,
@@ -499,6 +799,7 @@ Output a JSON object with this exact schema:
       emails,
       cultureFitEvaluation,
       extraAttributesEvaluation,
+      weightedCriteriaScore,
     });
   } catch (error: any) {
     console.error("Error in /api/evaluate-candidate pipeline with Groq:", error);
@@ -619,6 +920,14 @@ Output a JSON object with this exact schema:
       },
       cultureFitEvaluation: simulatedCultureFitEvaluation,
       extraAttributesEvaluation: simulatedExtraAttributesEvaluations,
+      weightedCriteriaScore: computeWeightedCriteriaScore(
+        job,
+        { match_percentage: baselineScore },
+        { score: baselineScore - 2 },
+        { status: "Eligible" },
+        simulatedCultureFitEvaluation,
+        simulatedExtraAttributesEvaluations
+      ),
     });
   }
 });

@@ -1,6 +1,7 @@
 import React from "react";
 import { Briefcase, Users, CheckCircle, XCircle, FileSpreadsheet, Calendar, TrendingUp, BarChart2, Star, ShieldAlert } from "lucide-react";
 import { Job, Candidate } from "../types";
+import { JtechBrandBanner, JtechLogo } from "./BrandingLogo";
 
 interface DashboardProps {
   jobs: Job[];
@@ -73,12 +74,18 @@ export default function Dashboard({ jobs, candidates, onNavigate, onSelectJob }:
       {/* Banner */}
       <div className="bg-[#0F172A] border border-slate-800 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-sm">
         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -z-10" />
-        <div className="space-y-2 max-w-xl text-center md:text-left">
+        <div className="space-y-3 max-w-xl text-center md:text-left">
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+            <span className="text-[10px] font-mono tracking-widest text-indigo-400 font-bold uppercase bg-indigo-950/80 px-2.5 py-1 rounded-md border border-indigo-500/30">
+              Enterprise Recruiting Hub
+            </span>
+            <JtechBrandBanner />
+          </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white font-display">
             Recruitment AI Agent Hub
           </h1>
           <p className="text-sm text-slate-300 leading-relaxed font-sans">
-            Welcome to AI Recruiter Pro. Leverage a synchronized multi-agent team powered by Gemini to deconstruct requirements, verify eligibility, audit work experience, and rank candidates with perfect transparency.
+            Welcome to AI Recruiter Pro. Leverage a synchronized multi-agent team powered by Groq LLaMA 3.3 to deconstruct requirements, verify eligibility, audit work experience, and rank candidates with perfect transparency.
           </p>
         </div>
         <div className="flex gap-3 shrink-0">

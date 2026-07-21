@@ -7,16 +7,30 @@ interface JobManagerProps {
   onAddJob: (job: Job) => void;
   onUpdateJob: (job: Job) => void;
   onDeleteJob: (id: string) => void;
+  defaultCompany?: string;
 }
 
-export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }: JobManagerProps) {
+export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob, defaultCompany }: JobManagerProps) {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [improvingAI, setImprovingAI] = useState(false);
+  const [improvingField, setImprovingField] = useState<"description" | "responsibilities" | "benefits" | "all" | null>(null);
   const [analyzingAI, setAnalyzingAI] = useState(false);
   const [activeJobTab, setActiveJobTab] = useState<"specs" | "promo">("specs");
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+
+  // Synchronize selectedJob when jobs list updates or when selectedJob is deleted
+  React.useEffect(() => {
+    if (jobs.length > 0) {
+      if (!selectedJob || !jobs.some((j) => j.id === selectedJob.id)) {
+        setSelectedJob(jobs[0]);
+      }
+    } else {
+      setSelectedJob(null);
+    }
+  }, [jobs]);
+
+  const PREDEFINED_TYPES = ["Full-time", "Part-time", "Contract", "Remote", "Visiting Job", "Graduate Engineer"];
 
   // Form Fields
   const [title, setTitle] = useState("");
@@ -24,6 +38,8 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
   const [department, setDepartment] = useState("");
   const [location, setLocation] = useState("");
   const [type, setType] = useState("Full-time");
+  const [isCustomType, setIsCustomType] = useState(false);
+  const [customType, setCustomType] = useState("");
   const [salaryRange, setSalaryRange] = useState("");
   const [experienceRequired, setExperienceRequired] = useState("");
   const [educationRequired, setEducationRequired] = useState("");
@@ -33,17 +49,53 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
   const [benefits, setBenefits] = useState("");
   const [description, setDescription] = useState("");
   const [thresholdScore, setThresholdScore] = useState<number>(70);
+  const [skillsWeight, setSkillsWeight] = useState<number>(30);
+  const [experienceWeight, setExperienceWeight] = useState<number>(25);
+  const [educationWeight, setEducationWeight] = useState<number>(20);
+  const [softSkillsWeight, setSoftSkillsWeight] = useState<number>(15);
+  const [bonusWeight, setBonusWeight] = useState<number>(10);
+
   const [extraAttributes, setExtraAttributes] = useState<{ attribute: string; bonusScore: number; }[]>([]);
   const [newAttributeName, setNewAttributeName] = useState("");
   const [newAttributeScore, setNewAttributeScore] = useState<number>(5);
   const [endDate, setEndDate] = useState("");
 
+  const applyPreset = (preset: "technical" | "executive" | "fresh" | "equal") => {
+    if (preset === "technical") {
+      setSkillsWeight(40);
+      setExperienceWeight(25);
+      setEducationWeight(15);
+      setSoftSkillsWeight(10);
+      setBonusWeight(10);
+    } else if (preset === "executive") {
+      setSkillsWeight(20);
+      setExperienceWeight(40);
+      setEducationWeight(10);
+      setSoftSkillsWeight(20);
+      setBonusWeight(10);
+    } else if (preset === "fresh") {
+      setSkillsWeight(35);
+      setExperienceWeight(10);
+      setEducationWeight(35);
+      setSoftSkillsWeight(10);
+      setBonusWeight(10);
+    } else if (preset === "equal") {
+      setSkillsWeight(30);
+      setExperienceWeight(25);
+      setEducationWeight(20);
+      setSoftSkillsWeight(15);
+      setBonusWeight(10);
+    }
+  };
+
   const resetForm = () => {
     setTitle("");
-    setCompany("");
+    setCompany(defaultCompany || "");
     setDepartment("");
     setLocation("");
     setType("Full-time");
+    setIsCustomType(false);
+    setCustomType("");
     setSalaryRange("");
     setExperienceRequired("");
     setEducationRequired("");
@@ -53,6 +105,11 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
     setBenefits("");
     setDescription("");
     setThresholdScore(70);
+    setSkillsWeight(30);
+    setExperienceWeight(25);
+    setEducationWeight(20);
+    setSoftSkillsWeight(15);
+    setBonusWeight(10);
     setExtraAttributes([]);
     setNewAttributeName("");
     setNewAttributeScore(5);
@@ -64,7 +121,17 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
     setCompany(job.company);
     setDepartment(job.department);
     setLocation(job.location);
-    setType(job.type);
+
+    if (PREDEFINED_TYPES.includes(job.type)) {
+      setType(job.type);
+      setIsCustomType(false);
+      setCustomType("");
+    } else {
+      setType("Other / Custom (Enter Manually)");
+      setIsCustomType(true);
+      setCustomType(job.type || "");
+    }
+
     setSalaryRange(job.salaryRange);
     setExperienceRequired(job.experienceRequired);
     setEducationRequired(job.educationRequired);
@@ -74,6 +141,19 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
     setBenefits(job.benefits);
     setDescription(job.description);
     setThresholdScore(job.thresholdScore !== undefined ? job.thresholdScore : 70);
+    if (job.criteriaWeights) {
+      setSkillsWeight(job.criteriaWeights.skillsWeight ?? 30);
+      setExperienceWeight(job.criteriaWeights.experienceWeight ?? 25);
+      setEducationWeight(job.criteriaWeights.educationWeight ?? 20);
+      setSoftSkillsWeight(job.criteriaWeights.softSkillsWeight ?? 15);
+      setBonusWeight(job.criteriaWeights.bonusWeight ?? 10);
+    } else {
+      setSkillsWeight(30);
+      setExperienceWeight(25);
+      setEducationWeight(20);
+      setSoftSkillsWeight(15);
+      setBonusWeight(10);
+    }
     setExtraAttributes(job.extraAttributes || []);
     setNewAttributeName("");
     setNewAttributeScore(5);
@@ -86,13 +166,17 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
       return;
     }
 
+    const effectiveType = (isCustomType || type === "Other / Custom (Enter Manually)")
+      ? (customType.trim() || "Custom Position")
+      : type;
+
     const newJob: Job = {
       id: "job-" + Date.now(),
       title,
       company,
       department,
       location,
-      type,
+      type: effectiveType,
       salaryRange,
       experienceRequired,
       educationRequired,
@@ -102,6 +186,13 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
       benefits,
       description,
       thresholdScore,
+      criteriaWeights: {
+        skillsWeight,
+        experienceWeight,
+        educationWeight,
+        softSkillsWeight,
+        bonusWeight,
+      },
       extraAttributes,
       endDate,
       createdAt: new Date().toISOString(),
@@ -116,13 +207,17 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
   const handleUpdate = () => {
     if (!selectedJob) return;
 
+    const effectiveType = (isCustomType || type === "Other / Custom (Enter Manually)")
+      ? (customType.trim() || "Custom Position")
+      : type;
+
     const updatedJob: Job = {
       ...selectedJob,
       title,
       company,
       department,
       location,
-      type,
+      type: effectiveType,
       salaryRange,
       experienceRequired,
       educationRequired,
@@ -132,6 +227,13 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
       benefits,
       description,
       thresholdScore,
+      criteriaWeights: {
+        skillsWeight,
+        experienceWeight,
+        educationWeight,
+        softSkillsWeight,
+        bonusWeight,
+      },
       extraAttributes,
       endDate,
     };
@@ -141,36 +243,61 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
     setSelectedJob(updatedJob);
   };
 
-  // AI Assist: Improve Job Description
-  const handleImproveWithAI = async () => {
-    if (!title || !description) {
-      alert("Please enter a Job Title and current Description text first.");
-      return;
-    }
+  // AI Assist: Improve Specific Field or All Fields (Description, Responsibilities, Benefits)
+  const handleImproveField = async (field: "description" | "responsibilities" | "benefits" | "all") => {
+    const effectiveTitle = title.trim() || "Job Position";
+    const effectiveCompany = company.trim() || "Our Company";
+    const effectiveType = (isCustomType || type === "Other / Custom (Enter Manually)")
+      ? (customType.trim() || "Custom Position")
+      : type;
 
-    setImprovingAI(true);
+    setImprovingField(field);
     try {
       const response = await fetch("/api/improve-job", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title,
-          company,
+          title: effectiveTitle,
+          company: effectiveCompany,
+          department,
+          location,
+          type: effectiveType,
+          salaryRange,
+          experienceRequired,
+          educationRequired,
+          field,
+          text: field === "description" ? description : field === "responsibilities" ? responsibilities : field === "benefits" ? benefits : "",
           description,
+          responsibilities,
+          benefits,
           requirements: mandatorySkills,
+          preferredSkills,
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to optimize job posting.");
+      if (!response.ok) throw new Error("Failed to optimize text with AI.");
       const data = await response.json();
       if (data.success) {
-        setDescription(data.improvedText);
-        alert("Job posting optimized successfully with AI copywriter assistance!");
+        if (field === "description") {
+          const newText = data.improvedText || data.improvedDescription;
+          if (newText) setDescription(newText);
+        } else if (field === "responsibilities") {
+          const newText = data.improvedText || data.improvedResponsibilities;
+          if (newText) setResponsibilities(newText);
+        } else if (field === "benefits") {
+          const newText = data.improvedText || data.improvedBenefits;
+          if (newText) setBenefits(newText);
+        } else if (field === "all") {
+          if (data.improvedDescription) setDescription(data.improvedDescription);
+          if (data.improvedResponsibilities) setResponsibilities(data.improvedResponsibilities);
+          if (data.improvedBenefits) setBenefits(data.improvedBenefits);
+        }
       }
     } catch (e: any) {
-      alert("AI Improvement failed: " + e.message);
+      console.error("AI Optimization error:", e);
+      alert("AI Optimization error: " + e.message);
     } finally {
-      setImprovingAI(false);
+      setImprovingField(null);
     }
   };
 
@@ -298,14 +425,15 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
 
                 {/* Department */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Department</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Department / Job Category</label>
                   <input
                     type="text"
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
-                    placeholder="e.g. Engineering"
-                    className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition shadow-sm"
+                    placeholder="e.g. Engineering, Research, Academics, Healthcare"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none transition shadow-sm font-sans"
                   />
+                  <p className="text-[9px] text-slate-400 mt-1">Enter any department, faculty, or job category manually.</p>
                 </div>
 
                 {/* Location */}
@@ -316,23 +444,51 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     placeholder="e.g. New York, NY (Hybrid)"
-                    className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition shadow-sm"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none transition shadow-sm font-sans"
                   />
                 </div>
 
                 {/* Type */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Employment Type</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Employment Type / Job Category *</label>
                   <select
-                    value={type}
-                    onChange={(e) => setType(e.target.value)}
-                    className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition shadow-sm"
+                    value={isCustomType ? "Other / Custom (Enter Manually)" : type}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "Other / Custom (Enter Manually)") {
+                        setIsCustomType(true);
+                        setType("Other / Custom (Enter Manually)");
+                      } else {
+                        setIsCustomType(false);
+                        setType(val);
+                      }
+                    }}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none transition shadow-sm font-sans"
                   >
-                    <option>Full-time</option>
-                    <option>Part-time</option>
-                    <option>Contract</option>
-                    <option>Remote</option>
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Remote">Remote</option>
+                    <option value="Visiting Job">Visiting Job</option>
+                    <option value="Graduate Engineer">Graduate Engineer</option>
+                    <option value="Other / Custom (Enter Manually)">➕ Other / Custom (Enter Manually)</option>
                   </select>
+
+                  {isCustomType && (
+                    <div className="mt-2 animate-fade-in space-y-1">
+                      <input
+                        type="text"
+                        required
+                        value={customType}
+                        onChange={(e) => setCustomType(e.target.value)}
+                        placeholder="Type custom category or position manually (e.g., Visiting Fellow, Adjunct)..."
+                        className="w-full bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-300 dark:border-indigo-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white font-semibold focus:outline-none transition shadow-xs font-sans"
+                      />
+                      <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
+                        Specify any custom job title or employment category manually.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Salary */}
@@ -407,74 +563,251 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
                 </div>
               </div>
 
-              {/* Textareas */}
+              {/* Textareas & AI Refine Actions */}
               <div className="space-y-4 mt-4">
+                {/* AI Master Assistant Banner */}
+                <div className="bg-gradient-to-r from-indigo-50/90 via-purple-50/60 to-indigo-50/90 dark:from-indigo-950/40 dark:via-purple-950/30 dark:to-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-3.5 shadow-xs">
+                  <div className="flex items-center gap-3 text-left">
+                    <div className="p-2.5 bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-xl shadow-sm shrink-0">
+                      <Sparkles className="w-5 h-5 animate-pulse text-amber-300" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white font-display flex items-center gap-2">
+                        Groq AI Copywriter & Auto-Fill Assistant
+                        <span className="text-[9px] bg-indigo-100 dark:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">Optional AI Tool</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug mt-0.5">
+                        Fill in your basic job details above, then click <span className="font-semibold text-indigo-600 dark:text-indigo-400">Auto-Generate with Groq AI</span> to instantly craft the Job Description, Responsibilities, and Benefits! You can also type manually or polish your notes section-by-section.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleImproveField("all")}
+                    disabled={improvingField !== null}
+                    className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-xl transition-all duration-150 shadow-md hover:shadow-indigo-500/25 cursor-pointer whitespace-nowrap flex items-center gap-2 shrink-0 disabled:opacity-50"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    {improvingField === "all" ? "Generating with Groq AI..." : "✨ Auto-Fill Description, Responsibilities & Benefits"}
+                  </button>
+                </div>
+
+                {/* Job Description */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Job Description *</label>
                     <button
                       type="button"
-                      onClick={handleImproveWithAI}
-                      disabled={improvingAI}
-                      className="text-xs text-indigo-600 hover:text-indigo-500 font-bold flex items-center gap-1 transition disabled:opacity-50"
+                      onClick={() => handleImproveField("description")}
+                      disabled={improvingField !== null}
+                      className="text-xs text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 font-bold flex items-center gap-1 transition disabled:opacity-50 cursor-pointer"
                     >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      {improvingAI ? "Optimizing with Copywriter AI..." : "Optimize Description with AI"}
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      {improvingField === "description" ? "Fixing Typos & Refining..." : "Optimize Description with AI"}
                     </button>
                   </div>
                   <textarea
                     rows={4}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Write a summary describing the company vision, culture, and high-level project goals..."
-                    className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition font-sans shadow-sm"
+                    placeholder="Enter description summary or rough notes (e.g. 'looking for sr react dev with node exp'). AI will fix spelling & write professional copy..."
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none transition font-sans shadow-sm"
                   />
                 </div>
 
+                {/* Responsibilities */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Responsibilities</label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Responsibilities</label>
+                    <button
+                      type="button"
+                      onClick={() => handleImproveField("responsibilities")}
+                      disabled={improvingField !== null}
+                      className="text-xs text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 font-bold flex items-center gap-1 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      {improvingField === "responsibilities" ? "Fixing Typos & Structuring..." : "Optimize Responsibilities with AI"}
+                    </button>
+                  </div>
                   <textarea
                     rows={3}
                     value={responsibilities}
                     onChange={(e) => setResponsibilities(e.target.value)}
-                    placeholder="Enter responsibilities, one per line..."
-                    className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition font-sans shadow-sm"
+                    placeholder="Enter responsibilities or notes (e.g. 'lead code review fix bugs design api'). AI will format into clean bullet points..."
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none transition font-sans shadow-sm"
                   />
                 </div>
 
+                {/* Benefits */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Benefits</label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Benefits</label>
+                    <button
+                      type="button"
+                      onClick={() => handleImproveField("benefits")}
+                      disabled={improvingField !== null}
+                      className="text-xs text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 font-bold flex items-center gap-1 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      {improvingField === "benefits" ? "Fixing Typos & Refining..." : "Optimize Benefits with AI"}
+                    </button>
+                  </div>
                   <textarea
                     rows={2}
                     value={benefits}
                     onChange={(e) => setBenefits(e.target.value)}
-                    placeholder="Enter company perks and benefits..."
-                    className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition font-sans shadow-sm"
+                    placeholder="Enter company perks or notes (e.g. 'health ins, 401k, remote work, bonuses'). AI will format into professional perks..."
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none transition font-sans shadow-sm"
                   />
                 </div>
 
-                {/* Advanced Threshold & Bonus Evaluation Rules */}
-                <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 space-y-4">
-                  <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
-                    <Award className="w-4 h-4 text-indigo-600" />
-                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-display">Evaluation Standards & Bonus Rules</h3>
+                {/* Advanced Criteria Weightage, Passing Threshold & Bonus Rules */}
+                <div className="bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl p-4.5 space-y-5">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <Award className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <div>
+                        <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider font-display">Intelligent Criteria Marks & Weightage Matrix</h3>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">Set custom total marks for each evaluation section to guide the AI model.</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-mono font-bold text-xs px-2.5 py-1 rounded-md border border-indigo-200 dark:border-indigo-800">
+                      Total Max Marks: {skillsWeight + experienceWeight + educationWeight + softSkillsWeight + bonusWeight}
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Passing Score Threshold */}
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Passing Score Threshold (%)</label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={thresholdScore}
-                          onChange={(e) => setThresholdScore(Number(e.target.value))}
-                          className="w-32 bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-1.5 text-sm text-slate-900 font-bold focus:outline-none transition shadow-sm"
-                        />
-                        <span className="text-[11px] text-slate-400 font-medium">Candidates below this are flagged as Reject/Consider.</span>
+                  {/* Preset Quick Selectors */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">One-Click Requirement Presets</label>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => applyPreset("technical")}
+                        className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1"
+                      >
+                        🛠️ Technical Heavy (40-25-15-10-10)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyPreset("executive")}
+                        className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1"
+                      >
+                        👔 Senior/Exec (20-40-10-20-10)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyPreset("fresh")}
+                        className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1"
+                      >
+                        🎓 Fresh Grad (35-10-35-10-10)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyPreset("equal")}
+                        className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1"
+                      >
+                        ⚖️ Balanced Equal (30-25-20-15-10)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 5 Criteria Marks Inputs */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                    {/* Skills Marks */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                        <span>Skills Requirements Marks</span>
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400 font-extrabold">{skillsWeight} Marks</span>
                       </div>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={skillsWeight}
+                        onChange={(e) => setSkillsWeight(Math.max(0, Number(e.target.value)))}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold font-mono text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    {/* Experience Marks */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                        <span>Experience Requirements Marks</span>
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400 font-extrabold">{experienceWeight} Marks</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={experienceWeight}
+                        onChange={(e) => setExperienceWeight(Math.max(0, Number(e.target.value)))}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold font-mono text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    {/* Education Marks */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                        <span>Education & Degrees Marks</span>
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400 font-extrabold">{educationWeight} Marks</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={educationWeight}
+                        onChange={(e) => setEducationWeight(Math.max(0, Number(e.target.value)))}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold font-mono text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    {/* Culture & Soft Skills Marks */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                        <span>Culture & Soft Skills Marks</span>
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400 font-extrabold">{softSkillsWeight} Marks</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={softSkillsWeight}
+                        onChange={(e) => setSoftSkillsWeight(Math.max(0, Number(e.target.value)))}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold font-mono text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    {/* Custom Bonus Attributes Marks */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                        <span>Bonus Attributes Marks</span>
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400 font-extrabold">{bonusWeight} Marks</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={bonusWeight}
+                        onChange={(e) => setBonusWeight(Math.max(0, Number(e.target.value)))}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold font-mono text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    {/* Passing Score Threshold */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                        <span>Passing Threshold (%)</span>
+                        <span className="font-mono text-rose-600 dark:text-rose-400 font-extrabold">{thresholdScore}%</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={thresholdScore}
+                        onChange={(e) => setThresholdScore(Number(e.target.value))}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold font-mono text-slate-900 dark:text-white"
+                      />
                     </div>
                   </div>
 
@@ -570,40 +903,44 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
           </div>
         ) : selectedJob ? (
           // View Job Details
-          <div className="space-y-6 flex-1 flex flex-col justify-between">
-            <div className="space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-                <div className="space-y-1 text-left">
+          <div className="space-y-6 flex-1 flex flex-col justify-between min-w-0">
+            <div className="space-y-5 min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5 min-w-0">
+                <div className="space-y-1 text-left min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="text-xl font-bold text-slate-900 tracking-tight font-display">{selectedJob.title}</h1>
-                    <span className="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                    <h1 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight font-display break-words max-w-full">{selectedJob.title}</h1>
+                    <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/40 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
                       {selectedJob.type}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 font-semibold">
-                    {selectedJob.company} • {selectedJob.location} • {selectedJob.department || "N/A"}
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold break-words leading-relaxed">
+                    {selectedJob.company} • {selectedJob.location} {selectedJob.department ? `• ${selectedJob.department}` : ""}
                   </p>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                   <button
                     onClick={() => {
                       loadForm(selectedJob);
                       setIsEditing(true);
                     }}
-                    className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg flex items-center space-x-1.5 transition text-xs font-bold shadow-sm"
+                    className="px-3 py-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg flex items-center space-x-1.5 transition text-xs font-bold shadow-sm"
                   >
                     <Edit className="w-3.5 h-3.5" />
                     <span>Edit</span>
                   </button>
                   {showConfirmDelete ? (
-                    <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-100 p-1 rounded-lg animate-fade-in">
-                      <span className="text-[10px] text-rose-700 font-bold px-1.5">Delete job & applicants?</span>
+                    <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/50 p-1 rounded-lg animate-fade-in">
+                      <span className="text-[10px] text-rose-700 dark:text-rose-400 font-bold px-1.5 whitespace-nowrap">Delete job & applicants?</span>
                       <button
                         onClick={() => {
-                          onDeleteJob(selectedJob.id);
-                          setSelectedJob(jobs.length > 1 ? jobs[0] : null);
-                          setShowConfirmDelete(false);
+                          if (selectedJob) {
+                            const targetId = selectedJob.id;
+                            const remaining = jobs.filter((j) => j.id !== targetId);
+                            setSelectedJob(remaining.length > 0 ? remaining[0] : null);
+                            setShowConfirmDelete(false);
+                            onDeleteJob(targetId);
+                          }
                         }}
                         className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] rounded-md transition cursor-pointer shadow-sm"
                       >
@@ -611,7 +948,7 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
                       </button>
                       <button
                         onClick={() => setShowConfirmDelete(false)}
-                        className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[10px] rounded-md transition cursor-pointer shadow-sm"
+                        className="px-2 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-[10px] rounded-md transition cursor-pointer shadow-sm"
                       >
                         No
                       </button>
@@ -621,22 +958,23 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
                       onClick={() => {
                         setShowConfirmDelete(true);
                       }}
-                      className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 rounded-lg flex items-center transition shadow-sm cursor-pointer"
+                      className="p-2 bg-rose-50 dark:bg-rose-950/20 hover:bg-rose-100 dark:hover:bg-rose-900/30 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40 rounded-lg flex items-center transition shadow-sm cursor-pointer"
                       title="Delete Job Posting"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
+                </div>
               </div>
 
               {/* Inner Tab Bar */}
-              <div className="flex border-b border-slate-100 pb-px gap-6 mb-4">
+              <div className="flex border-b border-slate-100 dark:border-slate-800 pb-px gap-3 sm:gap-6 mb-4 overflow-x-auto max-w-full no-scrollbar flex-nowrap shrink-0">
                 <button
                   onClick={() => setActiveJobTab("specs")}
-                  className={`pb-2.5 text-xs font-bold border-b-2 transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                  className={`pb-2.5 text-xs font-bold border-b-2 transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 ${
                     activeJobTab === "specs"
-                      ? "border-indigo-600 text-indigo-600"
-                      : "border-transparent text-slate-400 hover:text-slate-600"
+                      ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
+                      : "border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                   }`}
                 >
                   <FileText className="w-3.5 h-3.5" />
@@ -644,10 +982,10 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
                 </button>
                 <button
                   onClick={() => setActiveJobTab("promo")}
-                  className={`pb-2.5 text-xs font-bold border-b-2 transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                  className={`pb-2.5 text-xs font-bold border-b-2 transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 ${
                     activeJobTab === "promo"
-                      ? "border-indigo-600 text-indigo-600"
-                      : "border-transparent text-slate-400 hover:text-slate-600"
+                      ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
+                      : "border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                   }`}
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
@@ -951,7 +1289,6 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
                 </div>
               </div>
             )}
-            </div>
 
             {/* Agent 1 Section */}
             <div className="border-t border-slate-100 pt-6 mt-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">

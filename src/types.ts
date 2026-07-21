@@ -15,6 +15,12 @@ export interface UserProfile {
   role: "hr" | "applicant" | "admin";
   accountNumber: string;
   createdAt: string;
+  companyName?: string;
+  phone?: string;
+  location?: string;
+  headline?: string;
+  bio?: string;
+  website?: string;
 }
 
 export interface Job {
@@ -35,10 +41,12 @@ export interface Job {
   analyzedRequirements?: JobAnalysis;
   createdAt: string;
   thresholdScore?: number;
+  criteriaWeights?: CriteriaWeights;
   extraAttributes?: { attribute: string; bonusScore: number; }[];
   hrId?: string; // HR ID who created the job
   hrName?: string; // HR name
   hrEmail?: string; // HR email
+  hrCompany?: string; // HR company / organization name
   endDate?: string; // Job posting end date
 }
 
@@ -123,6 +131,30 @@ export interface ExtraAttributesEvaluation {
   }[];
 }
 
+export interface CriteriaWeights {
+  skillsWeight: number;      // e.g. 30
+  experienceWeight: number;  // e.g. 25
+  educationWeight: number;   // e.g. 20
+  softSkillsWeight: number;  // e.g. 15
+  bonusWeight: number;       // e.g. 10
+}
+
+export interface WeightedCriteriaScore {
+  skillsScore: number;
+  skillsMax: number;
+  experienceScore: number;
+  experienceMax: number;
+  educationScore: number;
+  educationMax: number;
+  softSkillsScore: number;
+  softSkillsMax: number;
+  bonusScore: number;
+  bonusMax: number;
+  totalScore: number;
+  maxTotalScore: number;
+  grade: "S" | "A" | "B" | "C" | "F";
+}
+
 export interface EvaluationReport {
   parsedResume: ParsedResume;
   eligibilityReport: EligibilityReport;
@@ -134,6 +166,7 @@ export interface EvaluationReport {
   emails?: GeneratedEmails;
   cultureFitEvaluation?: CultureFitEvaluation;
   extraAttributesEvaluation?: ExtraAttributesEvaluation;
+  weightedCriteriaScore?: WeightedCriteriaScore;
 }
 
 export interface Candidate {

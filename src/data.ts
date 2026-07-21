@@ -2,6 +2,37 @@ import { Job, Candidate } from "./types";
 
 export const PRELOADED_JOBS: Job[] = [
   {
+    id: "job-1",
+    title: "AI Architect",
+    company: "Jtech Solutions",
+    department: "Artificial Intelligence & Cloud Architecture",
+    location: "Lahore, Pakistan / Remote",
+    type: "Full-time",
+    salaryRange: "$180,000 - $240,000",
+    experienceRequired: "5+ years",
+    educationRequired: "Master's or Ph.D. in CS, Artificial Intelligence, or equivalent experience",
+    mandatorySkills: "System Architecture, LLMs, Multi-Agent Systems, PyTorch, Vector Search, Cloud Infrastructure",
+    preferredSkills: "Groq LLaMA, RAG, Kubernetes, MLOps, Distributed Systems, Function Calling",
+    responsibilities: "- Architect enterprise-grade multi-agent autonomous recruitment systems\n- Design resilient LLM orchestration layers and vector retrieval pipelines\n- Establish MLOps frameworks, model evaluation metrics, and security governance\n- Lead high-level technical direction for generative AI platforms",
+    benefits: "- Competitive global compensation package with equity options\n- 100% remote work flexibility with flexible working hours\n- Annual learning & hardware upgrades budget\n- Comprehensive health and wellness coverage",
+    description: "Jtech Solutions is seeking a visionary AI Architect to lead the design and deployment of advanced multi-agent talent intelligence systems. You will orchestrate state-of-the-art LLMs, real-time boardroom evaluation protocols, and enterprise vector search infrastructures.",
+    createdAt: "2026-07-20T10:00:00Z",
+    thresholdScore: 80,
+    extraAttributes: [
+      { attribute: "Ph.D. in Computer Science or AI", bonusScore: 10 },
+      { attribute: "Experience with Multi-Agent Orchestration", bonusScore: 10 }
+    ],
+    analyzedRequirements: {
+      job_title: "AI Architect",
+      mandatory_skills: ["System Architecture", "LLMs", "Multi-Agent Systems", "PyTorch", "Vector Search", "Cloud Infrastructure"],
+      preferred_skills: ["Groq LLaMA", "RAG", "Kubernetes", "MLOps", "Distributed Systems", "Function Calling"],
+      minimum_experience: "5 years",
+      required_education: "Master's or Ph.D. in CS, Artificial Intelligence, or equivalent experience",
+      certifications: [],
+      soft_skills: ["Strategic Vision", "Technical Leadership", "System Design", "Problem Solving"]
+    }
+  },
+  {
     id: "job-2",
     title: "AI Engineer",
     company: "Synapse Analytics",

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Cpu, Briefcase, Users, Upload, LogOut, LogIn, Key, UserCheck, Shield, Sparkles, PlusCircle, LayoutDashboard, Database, Loader2, Sun, Moon, CheckCircle, Eye, EyeOff } from "lucide-react";
+import { Cpu, Briefcase, Users, Upload, LogOut, LogIn, Key, UserCheck, Shield, Sparkles, PlusCircle, LayoutDashboard, Database, Loader2, Sun, Moon, CheckCircle, Eye, EyeOff, Building2, Save } from "lucide-react";
 import { Job, Candidate, EvaluationReport, UserProfile, AppNotification } from "./types";
 import { PRELOADED_JOBS, PRELOADED_CANDIDATES } from "./data";
 import { auth, db } from "./firebase";
@@ -12,10 +12,13 @@ import {
   updateProfile,
   getAuth as getSecondaryAuth,
   createUserWithEmailAndPassword as createSecondaryUser,
-  signOut as signSecondaryOut
+  signOut as signSecondaryOut,
+  sendPasswordResetEmail,
+  confirmPasswordReset
 } from "firebase/auth";
 import {
   collection,
+  collectionGroup,
   getDocs,
   setDoc,
   doc,
@@ -35,6 +38,7 @@ import AgentBoardroom from "./components/AgentBoardroom";
 import ApplicantDashboard from "./components/ApplicantDashboard";
 import AdminDashboard from "./components/AdminDashboard";
 import NotificationBell from "./components/NotificationBell";
+import { AppLogo, JtechLogo, JtechBrandBanner } from "./components/BrandingLogo";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>("dashboard");
@@ -80,6 +84,7 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [authName, setAuthName] = useState("");
+  const [authCompany, setAuthCompany] = useState("");
   const [authRole, setAuthRole] = useState<"hr" | "applicant" | "admin">("hr");
   const [authCode, setAuthCode] = useState("");
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
@@ -89,6 +94,34 @@ export default function App() {
   const [firebaseLoading, setFirebaseLoading] = useState(true);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [hrPasscode, setHrPasscode] = useState("HR999");
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [forgotPasswordStep, setForgotPasswordStep] = useState<"email" | "reset">("email");
+  const [resetKey, setResetKey] = useState("");
+  const [resetSuccessMessage, setResetSuccessMessage] = useState("");
+
+  // User profile edit states
+  const [profileNameInput, setProfileNameInput] = useState("");
+  const [profileCompanyName, setProfileCompanyName] = useState("");
+  const [profilePhone, setProfilePhone] = useState("");
+  const [profileLocation, setProfileLocation] = useState("");
+  const [profileHeadline, setProfileHeadline] = useState("");
+  const [profileBio, setProfileBio] = useState("");
+  const [profileWebsite, setProfileWebsite] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
+
+  // Sync profile edit inputs whenever profile updates
+  useEffect(() => {
+    if (profile) {
+      setProfileNameInput(profile.name || "");
+      setProfileCompanyName(profile.companyName || "");
+      setProfilePhone(profile.phone || "");
+      setProfileLocation(profile.location || "");
+      setProfileHeadline(profile.headline || "");
+      setProfileBio(profile.bio || "");
+      setProfileWebsite(profile.website || "");
+    }
+  }, [profile]);
 
   // Load & Sync from Firestore
   useEffect(() => {
@@ -148,6 +181,7 @@ export default function App() {
               email: firebaseUser.email!,
               role: resolvedRole,
               accountNumber: defaultAcct,
+              companyName: "",
               createdAt: new Date().toISOString()
             };
             await setDoc(userDocRef, userProfile);
@@ -159,6 +193,12 @@ export default function App() {
               email: data.email || firebaseUser.email!,
               role: isHardcodedAdmin ? "admin" : (data.role || "hr"),
               accountNumber: data.accountNumber || (isHardcodedAdmin ? `ADMIN-${Math.floor(100 + Math.random() * 900)}` : `HR-${Math.floor(100000 + Math.random() * 900000)}`),
+              companyName: data.companyName || "",
+              phone: data.phone || "",
+              location: data.location || "",
+              headline: data.headline || "",
+              bio: data.bio || "",
+              website: data.website || "",
               createdAt: data.createdAt || new Date().toISOString(),
             };
             if (!data.role || !data.accountNumber || (isHardcodedAdmin && data.role !== "admin")) {
@@ -187,30 +227,40 @@ export default function App() {
 
           // Now subscribe depending on the role!
           if (userProfile.role === "hr") {
-            // Seed fresh database subcollections for this specific HR if empty
-            const freshJobsSnapshot = await getDocs(collection(db, "users", firebaseUser.uid, "jobs"));
-            if (freshJobsSnapshot.empty) {
-              console.log(`Seeding initial jobs for user ${firebaseUser.uid} into Firestore...`);
-              for (const job of PRELOADED_JOBS) {
-                const jobWithHR = {
-                  ...job,
-                  hrId: firebaseUser.uid,
-                  hrName: userProfile.name,
-                  hrEmail: userProfile.email
-                };
-                await setDoc(doc(db, "users", firebaseUser.uid, "jobs", job.id), jobWithHR);
-              }
-            }
+            const userHasSeeded = (userDocSnap.data() as any)?.hasSeeded === true;
 
-            const freshCandidatesSnapshot = await getDocs(collection(db, "users", firebaseUser.uid, "candidates"));
-            if (freshCandidatesSnapshot.empty) {
-              console.log(`Seeding initial candidates for user ${firebaseUser.uid} into Firestore...`);
-              for (const cand of PRELOADED_CANDIDATES) {
-                const candWithHR = {
-                  ...cand,
-                  hrId: firebaseUser.uid
-                };
-                await setDoc(doc(db, "users", firebaseUser.uid, "candidates", cand.id), candWithHR);
+            // Seed initial sample jobs and candidates for HR users if their collection is empty
+            if (!userHasSeeded) {
+              try {
+                const freshJobsSnapshot = await getDocs(collection(db, "users", firebaseUser.uid, "jobs"));
+                if (freshJobsSnapshot.empty) {
+                  console.log(`Seeding initial jobs for user ${firebaseUser.uid} into Firestore...`);
+                  for (const job of PRELOADED_JOBS) {
+                    const jobWithHR = {
+                      ...job,
+                      hrId: firebaseUser.uid,
+                      hrName: userProfile.name,
+                      hrEmail: userProfile.email
+                    };
+                    await setDoc(doc(db, "users", firebaseUser.uid, "jobs", job.id), jobWithHR);
+                  }
+                }
+
+                const freshCandidatesSnapshot = await getDocs(collection(db, "users", firebaseUser.uid, "candidates"));
+                if (freshCandidatesSnapshot.empty) {
+                  console.log(`Seeding initial candidates for user ${firebaseUser.uid} into Firestore...`);
+                  for (const cand of PRELOADED_CANDIDATES) {
+                    const candWithHR = {
+                      ...cand,
+                      hrId: firebaseUser.uid
+                    };
+                    await setDoc(doc(db, "users", firebaseUser.uid, "candidates", cand.id), candWithHR);
+                  }
+                }
+              } catch (seedErr) {
+                console.error("Error seeding initial HR collections:", seedErr);
+              } finally {
+                await setDoc(userDocRef, { hasSeeded: true }, { merge: true });
               }
             }
 
@@ -242,89 +292,86 @@ export default function App() {
               }
             });
 
-            // ADMIN logic: Load all users, all HR jobs, and all HR candidates
-            unsubscribeUsers = onSnapshot(collection(db, "users"), async (usersSnap) => {
+            // ADMIN logic: Realtime listeners for users, all jobs, and all candidates
+            unsubscribeUsers = onSnapshot(collection(db, "users"), (usersSnap) => {
               const userList: UserProfile[] = [];
-              const hrIds: string[] = [];
               usersSnap.forEach((doc) => {
-                const u = doc.data() as UserProfile;
-                userList.push(u);
-                if (u.role === "hr") {
-                  hrIds.push(u.uid);
-                }
+                userList.push(doc.data() as UserProfile);
               });
               setAllUsers(userList);
+            });
 
-              // Pull jobs and candidates for all active HRs
-              const globalJobs: Job[] = [];
-              const globalCandidates: Candidate[] = [];
+            // ADMIN Realtime sync for ALL jobs
+            unsubscribeJobs = onSnapshot(collectionGroup(db, "jobs"), (snapshot) => {
+              const jobsMap = new Map<string, Job>();
+              snapshot.forEach((jDoc) => {
+                const jData = jDoc.data() as Job;
+                if (jData && jData.id) {
+                  jobsMap.set(jData.id, jData);
+                }
+              });
+              setJobs(Array.from(jobsMap.values()));
+            });
 
-              for (const hrId of hrIds) {
-                const hrUser = userList.find(u => u.uid === hrId);
-                const jobsSnap = await getDocs(collection(db, "users", hrId, "jobs"));
-                jobsSnap.forEach((jDoc) => {
-                  globalJobs.push({
-                    ...jDoc.data() as Job,
-                    hrId: hrId,
-                    hrName: hrUser?.name || "HR Recruiter",
-                    hrEmail: hrUser?.email || ""
-                  });
-                });
-
-                const candidatesSnap = await getDocs(collection(db, "users", hrId, "candidates"));
-                candidatesSnap.forEach((cDoc) => {
-                  globalCandidates.push({
-                    ...cDoc.data() as Candidate,
-                    hrId: hrId
-                  });
-                });
-              }
-
-              setJobs(globalJobs);
-              setCandidates(globalCandidates);
+            // ADMIN Realtime sync for ALL candidates
+            unsubscribeCandidates = onSnapshot(collectionGroup(db, "candidates"), (snapshot) => {
+              const candMap = new Map<string, Candidate>();
+              snapshot.forEach((cDoc) => {
+                const cData = cDoc.data() as Candidate;
+                if (cData && cData.id) {
+                  candMap.set(cData.id, cData);
+                }
+              });
+              setCandidates(Array.from(candMap.values()));
             });
 
           } else {
-            // APPLICANT / CANDIDATE logic: Load all active HR jobs, and load the applicant's own candidate applications
-            unsubscribeUsers = onSnapshot(collection(db, "users"), async (usersSnap) => {
+            // APPLICANT / CANDIDATE logic: Realtime listeners for users, active jobs, and applicant's own applications
+            unsubscribeUsers = onSnapshot(collection(db, "users"), (usersSnap) => {
               const userList: UserProfile[] = [];
-              const hrIds: string[] = [];
               usersSnap.forEach((doc) => {
-                const u = doc.data() as UserProfile;
-                userList.push(u);
-                if (u.role === "hr") {
-                  hrIds.push(u.uid);
-                }
+                userList.push(doc.data() as UserProfile);
               });
               setAllUsers(userList);
+            });
 
-              const activeJobs: Job[] = [];
-              const myApplications: Candidate[] = [];
-
-              for (const hrId of hrIds) {
-                const hrUser = userList.find(u => u.uid === hrId);
-                const jobsSnap = await getDocs(collection(db, "users", hrId, "jobs"));
-                jobsSnap.forEach((jDoc) => {
-                  activeJobs.push({
-                    ...jDoc.data() as Job,
-                    hrId: hrId,
-                    hrName: hrUser?.name || "HR Recruiter",
-                    hrEmail: hrUser?.email || ""
+            // CANDIDATE Realtime sync for ALL active jobs across HR postings
+            unsubscribeJobs = onSnapshot(collectionGroup(db, "jobs"), (snapshot) => {
+              const activeJobsMap = new Map<string, Job>();
+              snapshot.forEach((jDoc) => {
+                const jData = jDoc.data() as Job;
+                if (jData && jData.id) {
+                  activeJobsMap.set(jData.id, {
+                    ...jData,
+                    hrId: jData.hrId || jDoc.ref.parent.parent?.id || ""
                   });
-                });
+                }
+              });
 
-                const candidatesSnap = await getDocs(query(collection(db, "users", hrId, "candidates"), where("candidateUid", "==", firebaseUser.uid)));
-                candidatesSnap.forEach((cDoc) => {
-                  const c = cDoc.data() as Candidate;
-                  myApplications.push({
-                    ...c,
-                    hrId: hrId
-                  });
-                });
+              // Always include default preloaded vacancies (e.g., AI Architect) if not already present in Firestore
+              for (const preJob of PRELOADED_JOBS) {
+                if (!activeJobsMap.has(preJob.id)) {
+                  activeJobsMap.set(preJob.id, preJob);
+                }
               }
 
-              setJobs(activeJobs);
-              setCandidates(myApplications);
+              setJobs(Array.from(activeJobsMap.values()));
+            }, (error) => {
+              console.error("Error subscribing to jobs for candidate:", error);
+              setJobs(PRELOADED_JOBS);
+            });
+
+            // CANDIDATE Realtime sync for applicant's own applications
+            const candQuery = query(collectionGroup(db, "candidates"), where("candidateUid", "==", firebaseUser.uid));
+            unsubscribeCandidates = onSnapshot(candQuery, (snapshot) => {
+              const myAppsMap = new Map<string, Candidate>();
+              snapshot.forEach((cDoc) => {
+                const cData = cDoc.data() as Candidate;
+                if (cData && cData.id) {
+                  myAppsMap.set(cData.id, cData);
+                }
+              });
+              setCandidates(Array.from(myAppsMap.values()));
             });
           }
 
@@ -368,11 +415,14 @@ export default function App() {
   const handleAddJob = async (newJob: Job) => {
     if (!user) return;
     try {
+      const activeCompany = newJob.company || profile?.companyName || "Organization";
       const jobWithHR = {
         ...newJob,
+        company: activeCompany,
         hrId: user.uid,
         hrName: profile?.name || user.name,
-        hrEmail: profile?.email || user.email
+        hrEmail: profile?.email || user.email,
+        hrCompany: profile?.companyName || activeCompany
       };
       await setDoc(doc(db, "users", user.uid, "jobs", newJob.id), jobWithHR);
     } catch (err) {
@@ -383,11 +433,14 @@ export default function App() {
   const handleUpdateJob = async (updatedJob: Job) => {
     if (!user) return;
     try {
+      const activeCompany = updatedJob.company || profile?.companyName || "Organization";
       const jobWithHR = {
         ...updatedJob,
+        company: activeCompany,
         hrId: updatedJob.hrId || user.uid,
         hrName: updatedJob.hrName || profile?.name || user.name,
-        hrEmail: updatedJob.hrEmail || profile?.email || user.email
+        hrEmail: updatedJob.hrEmail || profile?.email || user.email,
+        hrCompany: profile?.companyName || activeCompany
       };
       await setDoc(doc(db, "users", user.uid, "jobs", updatedJob.id), jobWithHR);
     } catch (err) {
@@ -397,13 +450,55 @@ export default function App() {
 
   const handleDeleteJob = async (id: string) => {
     if (!user) return;
+
+    const targetJob = jobs.find((j) => j.id === id);
+    const targetHrId = targetJob?.hrId || user.uid;
+
+    // Instantly filter out deleted job and associated candidates from React state
+    setJobs((prev) => prev.filter((j) => j.id !== id));
+    setCandidates((prev) => prev.filter((c) => c.jobId !== id));
+
+    if (selectedJob?.id === id) {
+      const remaining = jobs.filter((j) => j.id !== id);
+      setSelectedJob(remaining.length > 0 ? remaining[0] : null);
+    }
+
     try {
-      await deleteDoc(doc(db, "users", user.uid, "jobs", id));
-      // Also delete candidates associated with this jobId inside the user's isolated store
-      const associated = candidates.filter((c) => c.jobId === id);
-      for (const cand of associated) {
-        await deleteDoc(doc(db, "users", user.uid, "candidates", cand.id));
+      // 1. Delete job from target HR document location in Firestore
+      await deleteDoc(doc(db, "users", targetHrId, "jobs", id));
+
+      // 2. Fallback delete from current logged-in user doc location if different
+      if (targetHrId !== user.uid) {
+        try {
+          await deleteDoc(doc(db, "users", user.uid, "jobs", id));
+        } catch (_) {}
       }
+
+      // 3. Delete from any other user's job collection where doc id === id or job.id === id
+      try {
+        const jobsGroupSnap = await getDocs(collectionGroup(db, "jobs"));
+        for (const jDoc of jobsGroupSnap.docs) {
+          if (jDoc.id === id || jDoc.data()?.id === id) {
+            await deleteDoc(jDoc.ref);
+          }
+        }
+      } catch (e) {
+        console.error("Error purging duplicate job docs across collections:", e);
+      }
+
+      // 4. Delete candidates associated with this jobId in Firestore across all subcollections
+      try {
+        const candsGroupSnap = await getDocs(collectionGroup(db, "candidates"));
+        for (const cDoc of candsGroupSnap.docs) {
+          if (cDoc.data()?.jobId === id) {
+            await deleteDoc(cDoc.ref);
+          }
+        }
+      } catch (e) {
+        console.error("Error purging candidates for deleted job:", e);
+      }
+
+      await setDoc(doc(db, "users", user.uid), { hasSeeded: true }, { merge: true });
     } catch (err) {
       console.error("Error deleting job in Firestore:", err);
     }
@@ -731,6 +826,11 @@ export default function App() {
       return;
     }
 
+    if (authRole === "hr" && !authCompany.trim()) {
+      setAuthError("Please enter your Organization / Company Name.");
+      return;
+    }
+
     // Role authentication verification
     if (authRole === "hr") {
       let activeHrPasscode = "HR999";
@@ -771,8 +871,9 @@ export default function App() {
       await setDoc(doc(db, "users", userCredential.user.uid), {
         uid: userCredential.user.uid,
         name: authName,
-        email: authEmail,
+        email: authEmail.trim().toLowerCase(),
         role: authRole,
+        companyName: authRole === "hr" ? authCompany.trim() : "",
         accountNumber,
         createdAt: new Date().toISOString(),
       });
@@ -781,17 +882,170 @@ export default function App() {
       setAuthEmail("");
       setAuthPassword("");
       setAuthName("");
+      setAuthCompany("");
       setAuthCode("");
       setIsRegistering(false);
     } catch (error: any) {
       console.error("Registration error:", error);
       let errorMsg = "Failed to register new account.";
       if (error.code === "auth/email-already-in-use") {
-        errorMsg = "This email is already in use.";
+        errorMsg = "Email already registered. Please enter a different email address or sign in to your account.";
       } else if (error.code === "auth/weak-password") {
-        errorMsg = "Security key should be at least 6 characters.";
+        errorMsg = "Password should be at least 6 characters.";
       } else if (error.code === "auth/invalid-email") {
         errorMsg = "Please enter a valid email address.";
+      }
+      setAuthError(errorMsg);
+    }
+  };
+
+  const handleSaveUserProfile = async (e?: React.FormEvent, customFields?: Partial<UserProfile>) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!user || !profile) return;
+    setIsSavingProfile(true);
+    setProfileSaveSuccess(false);
+
+    try {
+      const updatedName = (customFields?.name !== undefined ? customFields.name : profileNameInput).trim() || profile.name;
+      const updatedCompany = (customFields?.companyName !== undefined ? customFields.companyName : profileCompanyName).trim();
+      const updatedPhone = (customFields?.phone !== undefined ? customFields.phone : profilePhone).trim();
+      const updatedLocation = (customFields?.location !== undefined ? customFields.location : profileLocation).trim();
+      const updatedHeadline = (customFields?.headline !== undefined ? customFields.headline : profileHeadline).trim();
+      const updatedBio = (customFields?.bio !== undefined ? customFields.bio : profileBio).trim();
+      const updatedWebsite = (customFields?.website !== undefined ? customFields.website : profileWebsite).trim();
+
+      const updatedProfile: UserProfile = {
+        ...profile,
+        name: updatedName,
+        companyName: updatedCompany,
+        phone: updatedPhone,
+        location: updatedLocation,
+        headline: updatedHeadline,
+        bio: updatedBio,
+        website: updatedWebsite
+      };
+
+      // 1. Save to users/{uid} in Firestore
+      await setDoc(doc(db, "users", user.uid), {
+        name: updatedName,
+        companyName: updatedCompany,
+        phone: updatedPhone,
+        location: updatedLocation,
+        headline: updatedHeadline,
+        bio: updatedBio,
+        website: updatedWebsite
+      }, { merge: true });
+
+      setProfile(updatedProfile);
+
+      // 2. Update displayName in Auth if changed
+      if (auth.currentUser && updatedName !== user.name) {
+        await updateProfile(auth.currentUser, { displayName: updatedName });
+        setUser(prev => prev ? { ...prev, name: updatedName } : null);
+      }
+
+      // 3. Update all existing jobs posted by this Manager in Firestore
+      if (profile.role === "hr" || profile.role === "admin") {
+        try {
+          const userJobsSnap = await getDocs(collection(db, "users", user.uid, "jobs"));
+          for (const jDoc of userJobsSnap.docs) {
+            const jData = jDoc.data() as Job;
+            await setDoc(doc(db, "users", user.uid, "jobs", jDoc.id), {
+              ...jData,
+              hrName: updatedName,
+              hrCompany: updatedCompany,
+              company: jData.company || updatedCompany
+            }, { merge: true });
+          }
+        } catch (errJobs) {
+          console.error("Error updating manager jobs with new info:", errJobs);
+        }
+      }
+
+      // 4. Update Candidate applications in Firestore if applicant
+      if (profile.role === "applicant") {
+        try {
+          const candsGroupSnap = await getDocs(collectionGroup(db, "candidates"));
+          for (const cDoc of candsGroupSnap.docs) {
+            if (cDoc.data()?.candidateUid === user.uid) {
+              await setDoc(cDoc.ref, {
+                name: updatedName,
+                phone: updatedPhone || cDoc.data().phone,
+              }, { merge: true });
+            }
+          }
+        } catch (errCands) {
+          console.error("Error updating candidate submissions with new info:", errCands);
+        }
+      }
+
+      setProfileSaveSuccess(true);
+      setTimeout(() => setProfileSaveSuccess(false), 4000);
+    } catch (err) {
+      console.error("Error updating user profile:", err);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleForgotPasswordRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setResetSuccessMessage("");
+
+    const targetEmail = authEmail.trim().toLowerCase();
+
+    if (!targetEmail) {
+      setAuthError("Email address is required.");
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, targetEmail);
+      setResetSuccessMessage(`A password reset link has been sent to ${targetEmail}. Please check your inbox and click the link in the email to update your password.`);
+    } catch (error: any) {
+      console.error("Forgot password request error:", error);
+      let errorMsg = "Failed to send reset link. Please check your email.";
+      if (error.code === "auth/user-not-found") {
+        errorMsg = "Please enter the registered email address that you entered during registration of your account.";
+      } else if (error.code === "auth/invalid-email") {
+        errorMsg = "Please enter a valid registered email address.";
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
+      setAuthError(errorMsg);
+    }
+  };
+
+  const handleForgotPasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setResetSuccessMessage("");
+
+    if (!resetKey || !authPassword) {
+      setAuthError("Reset key and new password are required.");
+      return;
+    }
+
+    if (authPassword.length < 6) {
+      setAuthError("New password must be at least 6 characters.");
+      return;
+    }
+
+    try {
+      await confirmPasswordReset(auth, resetKey, authPassword);
+      setResetSuccessMessage("Password reset successful! You can now log in with your new password.");
+      setResetKey("");
+      setAuthPassword("");
+      setForgotPasswordStep("email");
+      setIsForgotPassword(false);
+    } catch (error: any) {
+      console.error("Forgot password reset error:", error);
+      let errorMsg = "Invalid or expired security reset key. Please request a new one.";
+      if (error.code === "auth/invalid-action-code") {
+        errorMsg = "The reset key is invalid or has already been used.";
+      } else if (error.code === "auth/expired-action-code") {
+        errorMsg = "The reset key has expired. Please request a new one.";
       }
       setAuthError(errorMsg);
     }
@@ -925,15 +1179,15 @@ export default function App() {
             {/* LEFT SIDEBAR (Desktop Only) */}
             <aside className="hidden md:flex flex-col w-64 bg-[#0F172A] text-slate-300 border-r border-slate-800 shrink-0">
               {/* Sidebar Brand Header */}
-              <div className="p-6 border-b border-slate-800/80 flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab("dashboard")}>
-                <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-md shadow-indigo-600/20">
-                  <Cpu className="w-5 h-5" />
+              <div className="p-5 border-b border-slate-800/80 flex flex-col gap-3 cursor-pointer" onClick={() => setActiveTab("dashboard")}>
+                <div className="flex items-center justify-between">
+                  <AppLogo size="sm" />
+                  <span className="text-[9px] bg-indigo-500/30 text-indigo-200 font-bold px-1.5 py-0.5 rounded uppercase">
+                    HR Portal
+                  </span>
                 </div>
-                <div>
-                  <h1 className="text-sm font-black tracking-wider uppercase text-white font-display flex items-center gap-1">
-                    AI Recruiter <span className="text-[9px] bg-indigo-500/30 text-indigo-200 font-bold px-1.5 py-0.5 rounded">HR Portal</span>
-                  </h1>
-                  <p className="text-[10px] text-slate-400 font-medium">Account: {profile?.accountNumber}</p>
+                <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
+                  <JtechLogo size="sm" showText={true} />
                 </div>
               </div>
 
@@ -1006,37 +1260,41 @@ export default function App() {
               </nav>
 
               {/* Sidebar User Info & Logout */}
-              <div className="p-4 border-t border-slate-800/85 bg-[#09101D] flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-8 h-8 bg-indigo-600/25 border border-indigo-500/20 text-indigo-300 rounded-full flex items-center justify-center font-bold text-xs uppercase shadow-inner">
+              <div className="p-3.5 border-t border-slate-800/85 bg-[#09101D] flex flex-col gap-2.5">
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div className="w-8 h-8 bg-indigo-600/25 border border-indigo-500/20 text-indigo-300 rounded-full flex items-center justify-center font-bold text-xs uppercase shadow-inner shrink-0">
                     {user.name.charAt(0)}
                   </div>
                   <div className="text-left min-w-0 flex-1">
-                    <p className="text-[11px] font-bold text-white leading-none truncate max-w-[110px]">{user.name}</p>
-                    <p className="text-[9px] text-slate-500 font-medium font-mono leading-none mt-1 truncate max-w-[110px]">{user.email}</p>
+                    <p className="text-[11px] font-bold text-white leading-tight truncate">{user.name}</p>
+                    <p className="text-[9px] text-slate-400 font-medium font-mono leading-tight mt-0.5 truncate">{user.email}</p>
                   </div>
                 </div>
-                <div className="flex items-center space-x-1">
-                  <NotificationBell 
-                    notifications={notifications} 
-                    userId={user.uid} 
-                    placement="sidebar" 
-                    onNotificationClick={handleNotificationClick} 
-                  />
-                  <button
-                    onClick={() => setIsDarkMode(!isDarkMode)}
-                    title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-                    className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition cursor-pointer"
-                  >
-                    {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-300" />}
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    title="Logout"
-                    className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition cursor-pointer"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
+
+                <div className="flex items-center justify-between border-t border-slate-800/60 pt-2 text-xs">
+                  <span className="text-[10px] text-slate-500 font-mono font-medium">Session Active</span>
+                  <div className="flex items-center space-x-1">
+                    <NotificationBell 
+                      notifications={notifications} 
+                      userId={user.uid} 
+                      placement="sidebar" 
+                      onNotificationClick={handleNotificationClick} 
+                    />
+                    <button
+                      onClick={() => setIsDarkMode(!isDarkMode)}
+                      title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                      className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-300" />}
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      title="Logout"
+                      className="p-1.5 text-slate-400 hover:text-rose-400 rounded hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </aside>
@@ -1045,12 +1303,7 @@ export default function App() {
             <header className="md:hidden w-full bg-[#0F172A] text-slate-300 border-b border-slate-800 sticky top-0 z-50">
               <div className="px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center space-x-2" onClick={() => setActiveTab("dashboard")}>
-                  <div className="p-1.5 bg-indigo-600 rounded-lg text-white">
-                    <Cpu className="w-4 h-4" />
-                  </div>
-                  <h1 className="text-xs font-black tracking-wider uppercase text-white font-display">
-                    AI Recruiter Pro
-                  </h1>
+                  <AppLogo size="sm" />
                 </div>
 
                 {/* Mobile Quick Navigation */}
@@ -1115,21 +1368,12 @@ export default function App() {
           </>
         ) : (
           /* APPLICANT or ADMIN Top Header */
-          <header className="w-full bg-[#0F172A] text-slate-300 border-b border-slate-800 py-4 px-6 md:px-8 flex items-center justify-between sticky top-0 z-50">
-            <div className="flex items-center space-x-3">
-              <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-md shadow-indigo-600/20">
-                <Cpu className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-sm font-black tracking-wider uppercase text-white font-display flex items-center gap-1.5">
-                  {profile?.role === "admin" ? "AI Recruiter Admin Portal" : "AI Recruiter Applicant Portal"}
-                  <span className="text-[9px] bg-indigo-500/30 text-indigo-200 font-bold px-1.5 py-0.5 rounded">
-                    {profile?.role === "admin" ? "ADMIN" : "CANDIDATE"}
-                  </span>
-                </h1>
-                <p className="text-[10px] text-slate-400 font-medium">
-                  {profile?.role === "admin" ? "System-Wide Master Audit Interface" : `Candidate Security Key: ${profile?.accountNumber}`}
-                </p>
+          <header className="w-full bg-[#0F172A] text-slate-300 border-b border-slate-800 py-3.5 px-6 md:px-8 flex items-center justify-between sticky top-0 z-50">
+            <div className="flex items-center space-x-4">
+              <AppLogo size="md" />
+              <div className="hidden sm:block h-6 w-px bg-slate-800" />
+              <div className="hidden sm:block">
+                <JtechLogo size="sm" showText={true} />
               </div>
             </div>
 
@@ -1167,194 +1411,322 @@ export default function App() {
         <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full">
           {!user ? (
             // AUTH MODULE (Interactive Form - Polished Light Theme Card)
-            <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 p-8 rounded-2xl space-y-6 shadow-md shadow-slate-100 relative text-slate-900">
-              <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-50/50 rounded-full blur-2xl -z-10" />
-              <div className="text-center space-y-2">
-                <div className="p-3.5 bg-indigo-50 text-indigo-600 rounded-2xl w-fit mx-auto shadow-sm">
-                  <Cpu className="w-8 h-8" />
+            <div className="max-w-md mx-auto my-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 rounded-2xl space-y-6 shadow-md shadow-slate-100 dark:shadow-none relative text-slate-900 dark:text-slate-100">
+              <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-full blur-2xl -z-10" />
+              
+              {/* Jtech Solution's Developer Banner */}
+              <div className="flex items-center justify-center pb-2">
+                <JtechLogo size="md" showText={true} />
+              </div>
+
+              <div className="text-center space-y-2 animate-fade-in border-t border-slate-100 dark:border-slate-800 pt-4">
+                <div className="flex justify-center mb-1">
+                  <AppLogo size="lg" layout="vertical" />
                 </div>
-                <h2 className="text-xl font-bold text-slate-900 tracking-tight font-display">Access AI Recruiter Pro</h2>
-                <p className="text-xs text-slate-500">Collaborative Multi-Agent platform for hiring managers.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  {isForgotPassword ? "Verify your identity to update your platform password." : "AI-Powered Recruitment & Talent Acquisition Platform for HR Teams, Recruiters, Interviewers & Job Applicants"}
+                </p>
               </div>
 
-              {/* Modern Auth Switcher Tabs at the top / upper side */}
-              <div className="grid grid-cols-3 gap-1 bg-slate-150/60 p-1 rounded-xl border border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsRegistering(false);
-                    setRegistrationSource("tab");
-                    setAuthError("");
-                  }}
-                  className={`py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    !isRegistering
-                      ? "bg-white text-indigo-600 shadow-sm"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  Sign In
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsRegistering(true);
-                    setAuthRole("hr");
-                    setRegistrationSource("tab");
-                    setAuthError("");
-                  }}
-                  className={`py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    isRegistering && registrationSource === "tab" && authRole === "hr"
-                      ? "bg-white text-indigo-600 shadow-sm"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  Register HR
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsRegistering(true);
-                    setAuthRole("applicant");
-                    setRegistrationSource("tab");
-                    setAuthError("");
-                  }}
-                  className={`py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    isRegistering && registrationSource === "tab" && authRole === "applicant"
-                      ? "bg-white text-indigo-600 shadow-sm"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  Register Candidate
-                </button>
-              </div>
+              {isForgotPassword ? (
+                <div className="space-y-4 text-left animate-fade-in">
+                  <div className="border-b border-slate-100 pb-2 mb-2 flex justify-between items-center">
+                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Reset Password
+                    </h3>
+                  </div>
 
-              <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4 text-left">
-                {isRegistering && (
-                  <>
+                  {resetSuccessMessage ? (
+                    <div className="space-y-4">
+                      <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 text-xs rounded-xl border border-emerald-200 dark:border-emerald-800/40 font-medium leading-relaxed font-sans shadow-xs flex items-start gap-2.5">
+                        <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-emerald-900 dark:text-emerald-200 mb-1">Email Sent!</p>
+                          <p>{resetSuccessMessage}</p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsForgotPassword(false);
+                          setAuthError("");
+                          setResetSuccessMessage("");
+                        }}
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg transition shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        Back to Sign In
+                      </button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleForgotPasswordRequest} className="space-y-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Email Address</label>
+                        <input
+                          type="email"
+                          required
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                          placeholder="name@company.com"
+                          className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition shadow-sm"
+                        />
+                        <p className="text-[10px] text-slate-500 mt-1.5 leading-relaxed font-sans">
+                          Enter your registered email address to receive a password reset link directly in your inbox.
+                        </p>
+                      </div>
+
+                      {authError && (
+                        <p className="text-xs font-semibold text-rose-500 font-mono text-center">{authError}</p>
+                      )}
+
+                      <button
+                        type="submit"
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg transition shadow-md shadow-indigo-600/10 cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <Key className="w-4 h-4" />
+                        Send Password Reset Link
+                      </button>
+
+                      <div className="flex justify-center items-center pt-2 border-t border-slate-100 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsForgotPassword(false);
+                            setAuthError("");
+                            setResetSuccessMessage("");
+                          }}
+                          className="text-xs text-slate-500 hover:text-indigo-600 font-semibold transition cursor-pointer"
+                        >
+                          ← Cancel & Sign In
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {/* Modern Auth Switcher Tabs at the top / upper side */}
+                  <div className="grid grid-cols-3 gap-1 bg-slate-150/60 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsRegistering(false);
+                        setRegistrationSource("tab");
+                        setAuthError("");
+                        setResetSuccessMessage("");
+                      }}
+                      className={`py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        !isRegistering
+                          ? "bg-white text-indigo-600 shadow-sm"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Sign In
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsRegistering(true);
+                        setAuthRole("hr");
+                        setRegistrationSource("tab");
+                        setAuthError("");
+                        setResetSuccessMessage("");
+                      }}
+                      className={`py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        isRegistering && registrationSource === "tab" && authRole === "hr"
+                          ? "bg-white text-indigo-600 shadow-sm"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Register HR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsRegistering(true);
+                        setAuthRole("applicant");
+                        setRegistrationSource("tab");
+                        setAuthError("");
+                        setResetSuccessMessage("");
+                      }}
+                      className={`py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        isRegistering && registrationSource === "tab" && authRole === "applicant"
+                          ? "bg-white text-indigo-600 shadow-sm"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Register Candidate
+                    </button>
+                  </div>
+
+                  {resetSuccessMessage && (
+                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 text-xs rounded-xl border border-emerald-150 dark:border-emerald-900/40 font-medium leading-relaxed font-sans text-center">
+                      {resetSuccessMessage}
+                    </div>
+                  )}
+
+                  <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4 text-left">
+                    {isRegistering && (
+                      <>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Full Name</label>
+                          <input
+                            type="text"
+                            required
+                            value={authName}
+                            onChange={(e) => setAuthName(e.target.value)}
+                            placeholder="Muhammad Talha Jahangir"
+                            className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition shadow-sm"
+                          />
+                        </div>
+
+                        {authRole === "hr" && (
+                          <div className="animate-fade-in">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                              Company / Organization Name
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={authCompany}
+                              onChange={(e) => setAuthCompany(e.target.value)}
+                              placeholder="e.g., Jtech Solutions, Synapse Corp"
+                              className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition shadow-sm"
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Select Account Type</label>
+                          <select
+                            value={authRole}
+                            onChange={(e) => {
+                              setAuthRole(e.target.value as "hr" | "applicant");
+                              setAuthCode("");
+                            }}
+                            className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-950 focus:outline-none transition shadow-sm font-sans cursor-pointer"
+                          >
+                            {registrationSource === "tab" ? (
+                              authRole === "hr" ? (
+                                <option value="hr">Hiring Manager / HR Recruiter</option>
+                              ) : (
+                                <option value="applicant">Candidate / Job Applicant</option>
+                              )
+                            ) : (
+                              <>
+                                <option value="hr">Hiring Manager / HR Recruiter</option>
+                                <option value="applicant">Candidate / Job Applicant</option>
+                              </>
+                            )}
+                          </select>
+                        </div>
+
+                        {authRole !== "applicant" && (
+                          <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-150 dark:border-slate-800 space-y-1.5 animate-fade-in">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Role Authorization Code</label>
+                            <input
+                              type="text"
+                              required
+                              value={authCode}
+                              onChange={(e) => setAuthCode(e.target.value)}
+                              placeholder={authRole === "hr" ? "Enter HR passkey" : "Enter Admin passkey"}
+                              className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none transition shadow-sm font-mono"
+                            />
+                            <p className="text-[9px] text-indigo-600 dark:text-indigo-400 font-semibold leading-relaxed">
+                              {authRole === "hr" ? (
+                                <span>* Contact system administrator to obtain the HR authorization passkey.</span>
+                              ) : (
+                                <span>* Contact system administrator to obtain the Admin passkey.</span>
+                              )}
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
+
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Full Name</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Email Address</label>
                       <input
-                        type="text"
+                        type="email"
                         required
-                        value={authName}
-                        onChange={(e) => setAuthName(e.target.value)}
-                        placeholder="Muhammad Talha Jahangir"
+                        value={authEmail}
+                        onChange={(e) => setAuthEmail(e.target.value)}
+                        placeholder="name@company.com"
                         className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition shadow-sm"
                       />
                     </div>
+
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Select Account Type</label>
-                      <select
-                        value={authRole}
-                        onChange={(e) => {
-                          setAuthRole(e.target.value as "hr" | "applicant");
-                          setAuthCode("");
-                        }}
-                        className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-950 focus:outline-none transition shadow-sm font-sans cursor-pointer"
-                      >
-                        {registrationSource === "tab" ? (
-                          authRole === "hr" ? (
-                            <option value="hr">HR Recruiter / Employer</option>
-                          ) : (
-                            <option value="applicant">Candidate / Job Applicant</option>
-                          )
-                        ) : (
-                          <>
-                            <option value="hr">HR Recruiter / Employer</option>
-                            <option value="applicant">Candidate / Job Applicant</option>
-                          </>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Password</label>
+                        {!isRegistering && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsForgotPassword(true);
+                              setForgotPasswordStep("email");
+                              setAuthError("");
+                              setResetSuccessMessage("");
+                            }}
+                            className="text-[10px] text-indigo-600 hover:text-indigo-550 font-bold transition cursor-pointer font-sans"
+                          >
+                            Forgot password?
+                          </button>
                         )}
-                      </select>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          required
+                          value={authPassword}
+                          onChange={(e) => setAuthPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg pl-3 pr-10 py-2 text-sm text-slate-900 focus:outline-none transition shadow-sm font-mono"
+                        />
+                        <button
+                          type="button"
+                          id="toggle-auth-password"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-450 hover:text-indigo-600 focus:outline-none cursor-pointer"
+                          title={showPassword ? "Hide password" : "Show password"}
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
                     </div>
 
-                    {authRole !== "applicant" && (
-                      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-150 dark:border-slate-800 space-y-1.5 animate-fade-in">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Role Authorization Code</label>
-                        <input
-                          type="text"
-                          required
-                          value={authCode}
-                          onChange={(e) => setAuthCode(e.target.value)}
-                          placeholder={authRole === "hr" ? "Enter HR passkey (e.g. HR999)" : "Enter Admin passkey (e.g. ADMIN777)"}
-                          className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none transition shadow-sm font-mono"
-                        />
-                        <p className="text-[9px] text-indigo-600 dark:text-indigo-400 font-semibold leading-relaxed">
-                          {authRole === "hr" ? (
-                            <span>* Contact system administrator to obtain the HR registration passkey.</span>
-                          ) : (
-                            <span>* Testing credential: use <span className="underline font-bold font-mono">ADMIN777</span></span>
-                          )}
-                        </p>
-                      </div>
+                    {authError && (
+                      <p className="text-xs font-semibold text-rose-500 font-mono text-center">{authError}</p>
                     )}
-                  </>
-                )}
 
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    placeholder="name@company.com"
-                    className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition shadow-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Security Key</label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      required
-                      value={authPassword}
-                      onChange={(e) => setAuthPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg pl-3 pr-10 py-2 text-sm text-slate-900 focus:outline-none transition shadow-sm font-mono"
-                    />
                     <button
-                      type="button"
-                      id="toggle-auth-password"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-450 hover:text-indigo-600 focus:outline-none cursor-pointer"
-                      title={showPassword ? "Hide password" : "Show password"}
+                      type="submit"
+                      className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg transition shadow-md shadow-indigo-600/10 cursor-pointer animate-fade-in"
                     >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {isRegistering ? "Register New Account" : "Sign In to Platform"}
+                    </button>
+                  </form>
+
+                  <div className="text-center pt-2 border-t border-slate-100 mt-2">
+                    <button
+                      onClick={() => {
+                        if (!isRegistering) {
+                          setIsRegistering(true);
+                          setAuthRole("hr");
+                          setRegistrationSource("link");
+                        } else {
+                          setIsRegistering(false);
+                          setRegistrationSource("tab");
+                        }
+                        setAuthError("");
+                        setResetSuccessMessage("");
+                      }}
+                      className="text-xs text-indigo-600 hover:text-indigo-500 font-semibold transition cursor-pointer"
+                    >
+                      {isRegistering ? "Already have an account? Sign In" : "Need Recruiter or Candidate Credentials? Register Now"}
                     </button>
                   </div>
-                </div>
-
-                {authError && (
-                  <p className="text-xs font-semibold text-rose-500 font-mono text-center">{authError}</p>
-                )}
-
-                <button
-                  type="submit"
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg transition shadow-md shadow-indigo-600/10 cursor-pointer"
-                >
-                  {isRegistering ? "Register New Account" : "Sign In to Platform"}
-                </button>
-              </form>
-
-              <div className="text-center pt-2 border-t border-slate-100 mt-2">
-                <button
-                  onClick={() => {
-                    if (!isRegistering) {
-                      setIsRegistering(true);
-                      setAuthRole("hr");
-                      setRegistrationSource("link");
-                    } else {
-                      setIsRegistering(false);
-                      setRegistrationSource("tab");
-                    }
-                    setAuthError("");
-                  }}
-                  className="text-xs text-indigo-600 hover:text-indigo-500 font-semibold transition cursor-pointer"
-                >
-                  {isRegistering ? "Already have an account? Sign In" : "Need Recruiter or Candidate Credentials? Register Now"}
-                </button>
-              </div>
+                </>
+              )}
             </div>
           ) : isEvaluating && selectedCandidate && selectedJob ? (
             // BOARDROOM PIPELINE MODULE (Active Multi-Agent Screening Room)
@@ -1376,6 +1748,9 @@ export default function App() {
                   candidates={candidates}
                   onApplyJob={handleApplyJobByCandidate}
                   onWithdrawJob={handleWithdrawJobByCandidate}
+                  onUpdateProfile={handleSaveUserProfile}
+                  isSavingProfile={isSavingProfile}
+                  profileSaveSuccess={profileSaveSuccess}
                 />
               ) : profile?.role === "admin" ? (
                 <AdminDashboard
@@ -1419,6 +1794,7 @@ export default function App() {
                   onAddJob={handleAddJob}
                   onUpdateJob={handleUpdateJob}
                   onDeleteJob={handleDeleteJob}
+                  defaultCompany={profile?.companyName || ""}
                 />
               )}
 
@@ -1601,6 +1977,11 @@ export default function App() {
                           <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">{user.name}</h2>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs text-slate-500 dark:text-slate-400 font-medium font-mono">{user.email}</span>
+                            {profile?.companyName && (
+                              <span className="bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 font-mono">
+                                <Building2 className="w-3 h-3 text-indigo-500" /> {profile.companyName}
+                              </span>
+                            )}
                             <span className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/50 text-emerald-600 dark:text-emerald-400 text-[9px] font-black tracking-widest px-2.5 py-0.5 rounded-full uppercase flex items-center gap-1">
                               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Active Recruiter
                             </span>
@@ -1613,6 +1994,132 @@ export default function App() {
                           <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Secure Multi-Tenant Isolated
                         </p>
                       </div>
+                    </div>
+
+                    {/* Editable Manager Profile & Organization Settings Form */}
+                    <div className="space-y-4 pt-2 border-b border-slate-150 dark:border-slate-800 pb-6">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2 font-display">
+                          <Building2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                          Organization & Manager Settings
+                        </h3>
+                        {profileSaveSuccess && (
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 font-mono">
+                            <CheckCircle className="w-3.5 h-3.5" /> Saved & Synchronized with Firestore
+                          </span>
+                        )}
+                      </div>
+
+                      <form onSubmit={(e) => handleSaveUserProfile(e)} className="bg-slate-50/70 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block font-mono">
+                              Full Name
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={profileNameInput}
+                              onChange={(e) => setProfileNameInput(e.target.value)}
+                              placeholder="e.g., Muhammad Talha Jahangir"
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none transition shadow-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block font-mono">
+                              Organization / Company Name
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={profileCompanyName}
+                              onChange={(e) => setProfileCompanyName(e.target.value)}
+                              placeholder="e.g., Jtech Solutions, Synapse Corp"
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none transition shadow-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block font-mono">
+                              Contact Phone Number
+                            </label>
+                            <input
+                              type="tel"
+                              value={profilePhone}
+                              onChange={(e) => setProfilePhone(e.target.value)}
+                              placeholder="+92 300 1234567"
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none transition shadow-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block font-mono">
+                              Location / Office Headquarters
+                            </label>
+                            <input
+                              type="text"
+                              value={profileLocation}
+                              onChange={(e) => setProfileLocation(e.target.value)}
+                              placeholder="e.g., Lahore, Pakistan / Remote"
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none transition shadow-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block font-mono">
+                              Role Title / Headline
+                            </label>
+                            <input
+                              type="text"
+                              value={profileHeadline}
+                              onChange={(e) => setProfileHeadline(e.target.value)}
+                              placeholder="e.g., Head of Talent Acquisition"
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none transition shadow-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block font-mono">
+                              Website / Company URL
+                            </label>
+                            <input
+                              type="url"
+                              value={profileWebsite}
+                              onChange={(e) => setProfileWebsite(e.target.value)}
+                              placeholder="https://company.com"
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none transition shadow-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block font-mono">
+                            Bio / Professional Summary
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={profileBio}
+                            onChange={(e) => setProfileBio(e.target.value)}
+                            placeholder="Brief executive overview or company hiring focus..."
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none transition shadow-sm resize-none"
+                          />
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-800">
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                            * Updates are synchronized directly with your Firestore user profile and job listings.
+                          </p>
+                          <button
+                            type="submit"
+                            disabled={isSavingProfile}
+                            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm shrink-0"
+                          >
+                            {isSavingProfile ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                            <span>Save Profile to Firestore</span>
+                          </button>
+                        </div>
+                      </form>
                     </div>
 
                     {/* Workspace statistics isolated to this user */}
@@ -1649,7 +2156,7 @@ export default function App() {
 
                     {/* Quick setting */}
                     <div className="flex items-center justify-between border-t border-slate-150 dark:border-slate-800 pt-5 text-xs text-slate-400">
-                      <span>Authenticated via Google Firebase • Multi-Agent Boardroom Node</span>
+                      <span>Authenticated via Google Firebase • Groq LLaMA 3.3 Multi-Agent Boardroom Node</span>
                       <button
                         onClick={handleLogout}
                         className="px-3.5 py-2 bg-rose-600 hover:bg-rose-550 text-white font-bold rounded-lg transition shadow-sm cursor-pointer"
@@ -1667,11 +2174,21 @@ export default function App() {
     </main>
 
         {/* Corporate footer - Polished Light Theme */}
-        <footer className="bg-white border-t border-slate-200 py-6 text-slate-400 text-xs">
-          <div className="max-w-7xl mx-auto px-6 md:px-8 flex flex-col md:flex-row items-center justify-between gap-4 font-mono">
-            <p>© 2026 AI Recruiter Pro Platform. Muhammad Talha Jahangir.</p>
-            <p className="flex items-center gap-1">
-              <Database className="w-3.5 h-3.5 text-slate-300" /> Client Storage Persistence • Gemini Server Node 3000
+        <footer className="bg-white dark:bg-[#0A0F1D] border-t border-slate-200 dark:border-slate-800 py-5 text-slate-500 dark:text-slate-400 text-xs transition-colors overflow-hidden">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 flex flex-col lg:flex-row items-center justify-between gap-4 text-center lg:text-left min-w-0 w-full">
+            <div className="flex items-center gap-2.5 flex-wrap justify-center lg:justify-start">
+              <AppLogo size="sm" />
+              <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">|</span>
+              <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400">© 2026 AI Recruiter Pro Platform.</p>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <JtechLogo size="sm" showText={true} />
+            </div>
+
+            <p className="flex items-center justify-center lg:justify-end gap-1.5 font-mono text-[11px] text-slate-400 dark:text-slate-500 break-words text-center">
+              <Database className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>Firebase Cloud Sync • Groq LLaMA 3.3 Multi-Agent Engine</span>
             </p>
           </div>
         </footer>

@@ -1,6 +1,6 @@
 {
   "name": "AI Recruiter Pro",
-  "description": "Multi-agent HR recruitment platform that orchestrates specialized AI agents to analyze jobs, parse resumes, check eligibility, evaluate skills, and rank candidates using Gemini.",
+  "description": "Multi-agent talent intelligence platform exclusively for hiring managers to analyze jobs, parse resumes, check eligibility, evaluate skills, and rank candidates using Gemini.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
