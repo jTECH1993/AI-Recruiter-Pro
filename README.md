@@ -297,7 +297,7 @@ VITE_FIREBASE_APP_ID=your_firebase_app_id
 ```bash
 npm run dev
 ```
-The application will boot up and run on `http://localhost:3000`.
+The application will boot up and run on `https://ai-recruiter-pro-tan.vercel.app/`.
 
 ### Step 4: Production Build
 ```bash
