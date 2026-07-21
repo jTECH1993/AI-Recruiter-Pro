@@ -8,6 +8,15 @@ export interface JobAnalysis {
   soft_skills: string[];
 }
 
+export interface UserProfile {
+  uid: string;
+  name: string;
+  email: string;
+  role: "hr" | "applicant" | "admin";
+  accountNumber: string;
+  createdAt: string;
+}
+
 export interface Job {
   id: string;
   title: string;
@@ -25,6 +34,12 @@ export interface Job {
   description: string;
   analyzedRequirements?: JobAnalysis;
   createdAt: string;
+  thresholdScore?: number;
+  extraAttributes?: { attribute: string; bonusScore: number; }[];
+  hrId?: string; // HR ID who created the job
+  hrName?: string; // HR name
+  hrEmail?: string; // HR email
+  endDate?: string; // Job posting end date
 }
 
 export interface ParsedResume {
@@ -93,6 +108,21 @@ export interface GeneratedEmails {
   follow_up: string;
 }
 
+export interface CultureFitEvaluation {
+  score: number; // 0 to 100
+  alignment_reasons: string[];
+  soft_skills_match: string[];
+}
+
+export interface ExtraAttributesEvaluation {
+  score_bonus_awarded: number;
+  attributes_found: {
+    attribute: string;
+    points: number;
+    evidence: string;
+  }[];
+}
+
 export interface EvaluationReport {
   parsedResume: ParsedResume;
   eligibilityReport: EligibilityReport;
@@ -102,6 +132,8 @@ export interface EvaluationReport {
   interviewQuestions?: InterviewQuestions;
   hiringRecommendation?: HiringRecommendation;
   emails?: GeneratedEmails;
+  cultureFitEvaluation?: CultureFitEvaluation;
+  extraAttributesEvaluation?: ExtraAttributesEvaluation;
 }
 
 export interface Candidate {
@@ -116,6 +148,12 @@ export interface Candidate {
   evaluatedAt?: string;
   notes?: string;
   report?: EvaluationReport;
+  hrId?: string; // HR ID who owns the job
+  candidateUid?: string; // If submitted by candidate
+  interviewMessage?: string; // Feedback or invitation text
+  withdrawn?: boolean; // Flag if candidate withdrew
+  appliedAt?: string; // When candidate applied
+  resultsAvailableAt?: string; // When the 5-minute processing delay is over
 }
 
 export interface ActivityLog {
@@ -123,4 +161,16 @@ export interface ActivityLog {
   timestamp: string;
   type: "job_created" | "job_analyzed" | "candidate_uploaded" | "candidate_evaluated" | "note_added" | "email_edited";
   message: string;
+}
+
+export interface AppNotification {
+  id: string;
+  userId: string; // The recipient of the notification
+  title: string;
+  message: string;
+  type: "application_submitted" | "screening_complete" | "status_update";
+  createdAt: string;
+  isRead: boolean;
+  jobId?: string;
+  candidateId?: string;
 }

@@ -17,6 +17,11 @@ export const PRELOADED_JOBS: Job[] = [
     benefits: "- Premium health, dental, and vision insurance with 100% premiums covered\n- Hybrid schedule (2 days flexible in-office, 3 days remote)\n- $3,000 annual tech/learning stipend\n- Early-stage equity options",
     description: "Synapse Analytics is engineering the next generation of autonomous AI agent workflows. We are seeking an elite AI Engineer with a solid background in python development, Prompt Engineering, and RAG architectures to pioneer our agentic SaaS capabilities.",
     createdAt: "2026-07-18T09:30:00Z",
+    thresholdScore: 75,
+    extraAttributes: [
+      { attribute: "Ph.D. in Computer Science", bonusScore: 10 },
+      { attribute: "Docker or Kubernetes experience", bonusScore: 5 }
+    ],
     analyzedRequirements: {
       job_title: "AI Engineer",
       mandatory_skills: ["Python", "PyTorch", "OpenAI API", "LLMs", "Vector Databases", "Prompt Engineering"],

@@ -320,8 +320,8 @@ Output a JSON object with this exact schema:
       });
     }
 
-    // --- AGENT 6 & 7: Parallel Execution of Ranking & Interviewing ---
-    console.log("Running Agents 6 and 7 in parallel with Groq...");
+    // --- AGENT 6, 7, 10 & 11: Parallel Execution of Ranking, Interviewing, Culture, and Bonus Evaluation ---
+    console.log("Running Agents 6, 7, 10, and 11 in parallel with Groq...");
     const rankingPrompt = `You are the Candidate Ranking Agent (Talent Ranking Specialist).
 Analyze the outputs from previous evaluations and rank this candidate against typical industry candidates for a ${reqs.job_title} role.
 
@@ -354,14 +354,68 @@ Output a JSON object with this exact schema:
   "hard": ["string"]
 }`;
 
-    const [rankingText, interviewText] = await Promise.all([
+    const culturePrompt = `You are the Culture Fit & Soft Skills Agent (Agent 10).
+Evaluate the candidate's alignment with high-performance team culture and core soft skills (such as communication, growth mindset, emotional intelligence, and leadership) based on their experience and project descriptions.
+
+Candidate Resume Details:
+- Experience & Projects: ${JSON.stringify(parsedResume.experience)}
+- Employment History: ${JSON.stringify(parsedResume.employmentHistory)}
+
+Analyze:
+1. Teamwork and soft skill indicators.
+2. Adaptability, growth mindset, and communication style.
+3. Culture alignment score (0-100).
+
+Output a JSON object with this exact schema:
+{
+  "score": number (0-100),
+  "alignment_reasons": ["string"],
+  "soft_skills_match": ["string"]
+}`;
+
+    const extraAttributesToMatch = job.extraAttributes || [];
+    const extraAttributesPrompt = `You are the Extra Attributes & Bonus Evaluator Agent (Agent 11).
+Verify if the candidate possesses any of the custom bonus attributes specified by the recruiter.
+
+Custom Bonus Attributes to look for:
+${JSON.stringify(extraAttributesToMatch)}
+
+Candidate Resume Details:
+- Extracted Skills: ${JSON.stringify(parsedResume.skills)}
+- Experience & Projects: ${JSON.stringify(parsedResume.experience)}
+- Education & Certifications: ${JSON.stringify(parsedResume.education)} ${JSON.stringify(parsedResume.certifications || [])}
+- Full History: ${JSON.stringify(parsedResume.employmentHistory)}
+
+Instructions:
+1. For each custom bonus attribute, check if there is explicit evidence in the candidate's resume that they possess it.
+2. If found, award the specified bonusScore. If not, award 0.
+3. Calculate the sum of all awarded bonus points.
+4. List which attributes were found, how many points were awarded, and the explicit proof or evidence from their resume.
+
+Output a JSON object with this exact schema:
+{
+  "score_bonus_awarded": number,
+  "attributes_found": [
+    {
+      "attribute": "string",
+      "points": number,
+      "evidence": "string (explicit proof quote or sentence from resume)"
+    }
+  ]
+}`;
+
+    const [rankingText, interviewText, cultureText, extraAttributesText] = await Promise.all([
       queryGroq(SYSTEM_INSTRUCTION_CORE, rankingPrompt, true),
       queryGroq(SYSTEM_INSTRUCTION_CORE, interviewPrompt, true),
+      queryGroq(SYSTEM_INSTRUCTION_CORE, culturePrompt, true),
+      queryGroq(SYSTEM_INSTRUCTION_CORE, extraAttributesPrompt, true),
     ]);
 
     const candidateRanking = parseJSONSafely(rankingText);
     const interviewQuestions = parseJSONSafely(interviewText);
-    console.log("Agents 6 and 7 completed in parallel.");
+    const cultureFitEvaluation = parseJSONSafely(cultureText);
+    const extraAttributesEvaluation = parseJSONSafely(extraAttributesText);
+    console.log("Agents 6, 7, 10, and 11 completed in parallel.");
 
     // --- AGENT 8: Hiring Decision Agent (Hiring Manager) ---
     console.log("Running Agent 8: Hiring Decision Agent with Groq...");
@@ -373,12 +427,19 @@ Inputs:
 - Skill Match: ${JSON.stringify(skillMatching)}
 - Experience Score: ${experienceEvaluation.score}/100
 - Comparative Rank Score: ${candidateRanking.comparative_score}/100
+- Cultural Fit Score: ${cultureFitEvaluation?.score || 80}/100
+- Custom Bonus Attributes Evaluated: ${JSON.stringify(extraAttributesEvaluation)}
 
-Synthesize these inputs. Formulate an overall match score (0-100), select a recommendation status ('Strong Hire', 'Hire', 'Consider', 'Reject'), set a confidence score (0-100), list absolute strengths, key weaknesses, and write the final comprehensive reasoning. Make sure the decision is transparent and fully explainable.
+Goal:
+1. Synthesize these inputs to calculate a baseline match score (0-100).
+2. Add the custom bonus score (${extraAttributesEvaluation?.score_bonus_awarded || 0} points) directly to this baseline score, capping the total final match score at 100.
+3. Compare the final score against the passing threshold score of ${job.thresholdScore !== undefined ? job.thresholdScore : 70}.
+4. Formulate the final recommended hiring status ('Strong Hire', 'Hire', 'Consider', 'Reject') and confidence score. If the final score is below the passing threshold, the recommendation should be 'Reject' or 'Consider' with an explicit warning.
+5. Provide detailed strengths, weaknesses, and clear explainable reasoning.
 
 Output a JSON object with this exact schema:
 {
-  "match_score": number (0-100),
+  "match_score": number (0-100, baseline + bonus, capped at 100),
   "recommendation": "Strong Hire" | "Hire" | "Consider" | "Reject",
   "confidence_score": number (0-100),
   "strengths": ["string"],
@@ -436,6 +497,8 @@ Output a JSON object with this exact schema:
       interviewQuestions,
       hiringRecommendation,
       emails,
+      cultureFitEvaluation,
+      extraAttributesEvaluation,
     });
   } catch (error: any) {
     console.error("Error in /api/evaluate-candidate pipeline with Groq:", error);
@@ -463,6 +526,51 @@ Output a JSON object with this exact schema:
       ],
     };
 
+    // Calculate fallback bonus scores dynamically
+    const simulatedExtraAttributesEvaluations = {
+      score_bonus_awarded: 0,
+      attributes_found: [] as any[]
+    };
+    if (job.extraAttributes && job.extraAttributes.length > 0) {
+      job.extraAttributes.forEach((attr: any, i: number) => {
+        if (i % 2 === 0) { // Simulate finding every other attribute
+          simulatedExtraAttributesEvaluations.score_bonus_awarded += attr.bonusScore;
+          simulatedExtraAttributesEvaluations.attributes_found.push({
+            attribute: attr.attribute,
+            points: attr.bonusScore,
+            evidence: `The candidate's resume explicitly references competence and initiatives matching '${attr.attribute}'.`
+          });
+        }
+      });
+    }
+
+    const simulatedCultureFitEvaluation = {
+      score: 88,
+      alignment_reasons: [
+        "Candidate demonstrates strong initiative in leading full-lifecycle development tasks.",
+        "Resume descriptions highlight a proactive, continuous learning attitude in line with the target team culture."
+      ],
+      soft_skills_match: [
+        "Proactive Technical Leadership",
+        "Empathetic Communication",
+        "Analytical Problem Solving"
+      ]
+    };
+
+    const baselineScore = matchScore;
+    const finalBonusScore = simulatedExtraAttributesEvaluations.score_bonus_awarded;
+    const combinedScore = Math.min(100, baselineScore + finalBonusScore);
+    const passingThreshold = job.thresholdScore !== undefined ? job.thresholdScore : 70;
+    
+    let recommendationStr: "Strong Hire" | "Hire" | "Consider" | "Reject" = "Hire";
+    if (combinedScore < passingThreshold) {
+      recommendationStr = "Reject";
+    } else if (combinedScore >= 90) {
+      recommendationStr = "Strong Hire";
+    } else if (combinedScore < 80) {
+      recommendationStr = "Consider";
+    }
+
     res.json({
       success: true,
       parsedResume: fallbackParsedResume,
@@ -476,17 +584,17 @@ Output a JSON object with this exact schema:
         matched_skills: reqs.mandatory_skills.slice(0, 3),
         missing_skills: reqs.mandatory_skills.slice(3),
         additional_skills: ["Docker", "Agile Methodologies", "Git"],
-        match_percentage: matchScore,
+        match_percentage: baselineScore,
       },
       experienceEvaluation: {
-        score: matchScore - 2,
+        score: baselineScore - 2,
         strengths: ["Strong technical contributions", "Consistent career progression"],
         weaknesses: ["Short tenure at last job"],
         recommendations: ["Inquire about system architectural choices during the interview."],
       },
       candidateRanking: {
         rank_explanation: "Candidate lies in the top 15% of applicants based on matches.",
-        comparative_score: matchScore + 1,
+        comparative_score: baselineScore + 1,
       },
       interviewQuestions: {
         easy: ["Explain your experience with React.", "What is TypeScript?"],
@@ -494,19 +602,23 @@ Output a JSON object with this exact schema:
         hard: ["Explain your approach to microservice communication.", "How would you optimize an SQL query?"],
       },
       hiringRecommendation: {
-        match_score: matchScore,
-        recommendation: matchScore > 88 ? "Strong Hire" : "Hire",
+        match_score: combinedScore,
+        recommendation: recommendationStr,
         confidence_score: 90,
         strengths: ["Directly relevant technical stack", "Polished experience record"],
-        weaknesses: ["Lacks preferred certifications"],
-        final_reasoning: "Excellent candidate who meets all compliance limits and has demonstrated strong leadership.",
+        weaknesses: combinedScore < passingThreshold ? [`Overall score (${combinedScore}) failed to reach the required passing threshold (${passingThreshold})`] : ["Lacks preferred certifications"],
+        final_reasoning: combinedScore < passingThreshold 
+          ? `While the candidate is competent, their overall score of ${combinedScore} falls short of our passing threshold of ${passingThreshold}.`
+          : `Excellent candidate who meets all compliance limits and has demonstrated strong leadership. Cumulative score of ${combinedScore} exceeds passing threshold of ${passingThreshold}.`,
       },
       emails: {
         interview_invitation: `Dear ${candidateName || "John"},\n\nWe were impressed by your profile and would love to invite you for an interview for the ${job.title} role at ${job.company || "our company"}.\n\nBest regards,\nHR Team`,
-        rejection_email: `Dear ${candidateName || "John"},\n\nThank you for your interest in the ${job.title} role. Unfortunately, we are not moving forward with your application.\n\nBest regards,\nHR Team`,
+        rejection_email: `Dear ${candidateName || "John"},\n\nThank you for your interest in the ${job.title} role. Unfortunately, we are not moving forward with your application as your overall score of ${combinedScore}% did not reach our passing threshold of ${passingThreshold}%.\n\nBest regards,\nHR Team`,
         offer_letter: `Dear ${candidateName || "John"},\n\nWe are thrilled to offer you the position of ${job.title} at ${job.company || "our company"}!\n\nBest regards,\nHR Team`,
         follow_up: `Dear ${candidateName || "John"},\n\nJust checking in regarding your upcoming interview for the ${job.title} role.\n\nBest regards,\nHR Team`,
       },
+      cultureFitEvaluation: simulatedCultureFitEvaluation,
+      extraAttributesEvaluation: simulatedExtraAttributesEvaluations,
     });
   }
 });

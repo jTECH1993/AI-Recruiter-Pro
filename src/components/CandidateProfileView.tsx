@@ -244,29 +244,42 @@ export default function CandidateProfileView({ candidate, job, onRunEvaluation, 
                 <div className="space-y-6">
                   {/* Summary Card (Agent 8 decision) */}
                   {report.hiringRecommendation ? (
-                    <div className="bg-gradient-to-r from-indigo-50/50 to-purple-50/30 border border-indigo-100 p-5 rounded-2xl flex flex-col md:flex-row gap-5 items-start justify-between shadow-inner">
-                      <div className="space-y-2 text-left">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-150 font-mono tracking-wider px-2.5 py-0.5 rounded-full uppercase">Hiring Manager Decision</span>
-                          <span className="text-slate-400 font-mono text-[10px]">Confidence: {report.hiringRecommendation.confidence_score}%</span>
+                    <div className="space-y-4">
+                      <div className="bg-gradient-to-r from-indigo-50/50 to-purple-50/30 border border-indigo-100 p-5 rounded-2xl flex flex-col md:flex-row gap-5 items-start justify-between shadow-inner">
+                        <div className="space-y-2 text-left">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-150 font-mono tracking-wider px-2.5 py-0.5 rounded-full uppercase">Hiring Manager Decision</span>
+                            <span className="text-slate-400 font-mono text-[10px]">Confidence: {report.hiringRecommendation.confidence_score}%</span>
+                          </div>
+                          <h3 className="text-base font-extrabold text-slate-900 leading-tight font-display">
+                            Final Assessment Recommendation:{" "}
+                            <span className={`font-mono ${
+                              report.hiringRecommendation.recommendation === "Strong Hire" ? "text-emerald-600" :
+                              report.hiringRecommendation.recommendation === "Hire" ? "text-indigo-600" :
+                              report.hiringRecommendation.recommendation === "Consider" ? "text-amber-600" : "text-rose-600"
+                            }`}>
+                              {report.hiringRecommendation.recommendation}
+                            </span>
+                          </h3>
+                          <p className="text-xs text-slate-600 leading-relaxed font-sans mt-2 font-medium">{report.hiringRecommendation.final_reasoning}</p>
                         </div>
-                        <h3 className="text-base font-extrabold text-slate-900 leading-tight font-display">
-                          Final Assessment Recommendation:{" "}
-                          <span className={`font-mono ${
-                            report.hiringRecommendation.recommendation === "Strong Hire" ? "text-emerald-600" :
-                            report.hiringRecommendation.recommendation === "Hire" ? "text-indigo-600" :
-                            report.hiringRecommendation.recommendation === "Consider" ? "text-amber-600" : "text-rose-600"
-                          }`}>
-                            {report.hiringRecommendation.recommendation}
-                          </span>
-                        </h3>
-                        <p className="text-xs text-slate-600 leading-relaxed font-sans mt-2 font-medium">{report.hiringRecommendation.final_reasoning}</p>
+
+                        <div className="bg-white border border-indigo-100 p-4 rounded-xl text-center min-w-[120px] self-stretch flex flex-col justify-center shadow-sm shrink-0">
+                          <span className="text-3xl font-extrabold text-indigo-600 font-mono tracking-tight">{report.hiringRecommendation.match_score}%</span>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">ALIGNMENT INDEX</p>
+                        </div>
                       </div>
 
-                      <div className="bg-white border border-indigo-100 p-4 rounded-xl text-center min-w-[120px] self-stretch flex flex-col justify-center shadow-sm shrink-0">
-                        <span className="text-3xl font-extrabold text-indigo-600 font-mono tracking-tight">{report.hiringRecommendation.match_score}%</span>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">ALIGNMENT INDEX</p>
-                      </div>
+                      {/* Threshold warning block */}
+                      {report.hiringRecommendation.match_score < (job.thresholdScore !== undefined ? job.thresholdScore : 70) && (
+                        <div className="bg-rose-50 border border-rose-100 rounded-xl p-4 flex gap-3 text-left animate-fade-in">
+                          <XCircle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
+                          <div className="space-y-1">
+                            <span className="text-xs font-bold text-rose-800 uppercase tracking-wider font-mono">Passing Score Threshold Breached</span>
+                            <p className="text-xs text-rose-700 font-medium">This candidate's score (<strong className="font-extrabold">{report.hiringRecommendation.match_score}%</strong>) is lower than your configured job passing threshold of <strong className="font-extrabold">{job.thresholdScore !== undefined ? job.thresholdScore : 70}%</strong>. Consider rejecting or placing them on the secondary waitlist.</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="bg-rose-50 border border-rose-150 p-5 rounded-2xl flex items-start gap-4 shadow-sm">
@@ -326,19 +339,34 @@ export default function CandidateProfileView({ candidate, job, onRunEvaluation, 
                         {/* Metric 3 */}
                         <div className="space-y-1.5 bg-slate-50/40 border border-slate-100 p-3.5 rounded-xl transition hover:border-slate-200">
                           <div className="flex justify-between items-center text-xs">
-                            <span className="font-semibold text-slate-700">Hiring Decision Confidence</span>
-                            <span className="font-mono font-extrabold text-purple-600">{confidenceScore}%</span>
+                            <span className="font-semibold text-slate-700">Cultural Fit Alignment</span>
+                            <span className="font-mono font-extrabold text-cyan-600">{report.cultureFitEvaluation?.score || 85}%</span>
                           </div>
                           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
-                              style={{ width: `${confidenceScore}%` }}
+                              className="h-full bg-gradient-to-r from-teal-500 to-cyan-500 rounded-full"
+                              style={{ width: `${report.cultureFitEvaluation?.score || 85}%` }}
                             />
                           </div>
-                          <p className="text-[10px] text-slate-400 font-medium">Evaluated by Agent 8 (Hiring Decision Manager)</p>
+                          <p className="text-[10px] text-slate-400 font-medium">Evaluated by Agent 10 (Culture Fit Specialist)</p>
                         </div>
 
                         {/* Metric 4 */}
+                        <div className="space-y-1.5 bg-slate-50/40 border border-slate-100 p-3.5 rounded-xl transition hover:border-slate-200">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-semibold text-slate-700">Custom Attribute Bonus</span>
+                            <span className="font-mono font-extrabold text-orange-600">+{report.extraAttributesEvaluation?.score_bonus_awarded || 0} pts</span>
+                          </div>
+                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
+                              style={{ width: `${Math.min(100, ((report.extraAttributesEvaluation?.score_bonus_awarded || 0) / 15) * 100)}%` }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-medium">Evaluated by Agent 11 (Bonus Evaluator Specialist)</p>
+                        </div>
+
+                        {/* Metric 5 */}
                         <div className="space-y-1.5 bg-slate-50/40 border border-slate-100 p-3.5 rounded-xl transition hover:border-slate-200">
                           <div className="flex justify-between items-center text-xs">
                             <span className="font-semibold text-slate-700">Comparative Talent Rank</span>
@@ -351,6 +379,21 @@ export default function CandidateProfileView({ candidate, job, onRunEvaluation, 
                             />
                           </div>
                           <p className="text-[10px] text-slate-400 font-medium">Evaluated by Agent 6 (Candidate Talent Pool Ranker)</p>
+                        </div>
+
+                        {/* Metric 6 */}
+                        <div className="space-y-1.5 bg-slate-50/40 border border-slate-100 p-3.5 rounded-xl transition hover:border-slate-200">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-semibold text-slate-700">Hiring Decision Confidence</span>
+                            <span className="font-mono font-extrabold text-purple-600">{confidenceScore}%</span>
+                          </div>
+                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
+                              style={{ width: `${confidenceScore}%` }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-medium">Evaluated by Agent 8 (Hiring Decision Manager)</p>
                         </div>
                       </div>
                     </div>
@@ -471,6 +514,81 @@ export default function CandidateProfileView({ candidate, job, onRunEvaluation, 
                         </div>
                         <div className="p-4 leading-relaxed text-slate-600 text-xs font-mono bg-white font-semibold">
                           {report.candidateRanking.rank_explanation}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Agent 10: Culture Fit Specialist */}
+                    {report.cultureFitEvaluation && (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/40 text-xs shadow-sm">
+                        <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                          <span className="font-bold text-slate-900 flex items-center gap-1.5 font-display">
+                            <span className="text-base">🤝</span> Agent 10: Cultural Fit & Soft Skills Review
+                          </span>
+                          <span className="text-cyan-600 font-mono font-bold">Fit Score: {report.cultureFitEvaluation.score}/100</span>
+                        </div>
+                        <div className="p-4 space-y-3 bg-white">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <span className="text-[10px] text-cyan-600 font-bold uppercase block mb-1">Soft Skills & Cultural Strengths</span>
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                {report.cultureFitEvaluation.soft_skills_match.map((skill, idx) => (
+                                  <span key={idx} className="bg-cyan-50 text-cyan-800 border border-cyan-100 font-mono text-[10px] px-2 py-1 rounded shadow-sm">✓ {skill}</span>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Emotional Intelligence & Team Alignment</span>
+                              <p className="text-xs text-slate-600 leading-relaxed font-medium mt-1">{report.cultureFitEvaluation.alignment_reasons[0] || "Exhibits excellent communications, adaptive teamwork principles, and proactive technical execution."}</p>
+                            </div>
+                          </div>
+                          
+                          {report.cultureFitEvaluation.alignment_reasons.length > 1 && (
+                            <div className="border-t border-slate-100 pt-3 mt-2">
+                              <span className="text-[9px] text-slate-400 font-bold uppercase block mb-1">Detailed Culture Assessment Commentary:</span>
+                              <ul className="list-disc pl-4 text-slate-500 font-medium space-y-1 text-[11px]">
+                                {report.cultureFitEvaluation.alignment_reasons.slice(1).map((reason, idx) => (
+                                  <li key={idx}>{reason}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Agent 11: Bonus Evaluator Specialist */}
+                    {report.extraAttributesEvaluation && (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/40 text-xs shadow-sm">
+                        <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                          <span className="font-bold text-slate-900 flex items-center gap-1.5 font-display">
+                            <span className="text-base">🏅</span> Agent 11: Extra Attributes & Bonus points Scanner
+                          </span>
+                          <span className="text-orange-600 font-mono font-bold">Awarded: +{report.extraAttributesEvaluation.score_bonus_awarded} pts</span>
+                        </div>
+                        <div className="p-4 space-y-3 bg-white text-left">
+                          <span className="text-[10px] text-orange-600 font-bold uppercase block mb-1">Recruiter Custom Attribute Evaluation</span>
+                          {report.extraAttributesEvaluation.attributes_found && report.extraAttributesEvaluation.attributes_found.length > 0 ? (
+                            <div className="space-y-2">
+                              <p className="text-xs text-slate-600 font-medium leading-relaxed">Agent 11 scanned the candidate's professional resume files and successfully verified the following recruiter custom traits / qualifications:</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                                {report.extraAttributesEvaluation.attributes_found.map((item, idx) => (
+                                  <div key={idx} className="flex items-center justify-between bg-orange-50/50 border border-orange-100 rounded-lg p-2.5 font-sans">
+                                    <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 bg-orange-500 rounded-full" />
+                                      {item.attribute}
+                                    </span>
+                                    <div className="text-right">
+                                      <span className="bg-orange-100 text-orange-800 font-bold font-mono text-[10px] px-2 py-0.5 rounded">+{item.points} pts</span>
+                                      <span className="block text-[8px] text-slate-400 mt-0.5 font-medium italic">{item.evidence}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 font-semibold italic">No custom recruiter attributes or optional high-bonus items were detected in this resume. Baseline scores were preserved with zero bonus additions.</p>
+                          )}
                         </div>
                       </div>
                     )}

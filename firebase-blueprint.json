@@ -8,7 +8,7 @@
         "createdAt": { "type": "string", "required": true }
       }
     },
-    "jobs": {
+    "users/{userId}/jobs": {
       "schema": {
         "id": { "type": "string", "required": true },
         "title": { "type": "string", "required": true },
@@ -25,10 +25,11 @@
         "responsibilities": { "type": "string", "required": false },
         "benefits": { "type": "string", "required": false },
         "createdAt": { "type": "string", "required": true },
+        "endDate": { "type": "string", "required": false },
         "analyzedRequirements": { "type": "map", "required": false }
       }
     },
-    "candidates": {
+    "users/{userId}/candidates": {
       "schema": {
         "id": { "type": "string", "required": true },
         "jobId": { "type": "string", "required": true },
@@ -40,7 +41,22 @@
         "eligibilityStatus": { "type": "string", "required": true },
         "notes": { "type": "string", "required": false },
         "evaluatedAt": { "type": "string", "required": false },
+        "appliedAt": { "type": "string", "required": false },
+        "resultsAvailableAt": { "type": "string", "required": false },
         "report": { "type": "map", "required": false }
+      }
+    },
+    "notifications": {
+      "schema": {
+        "id": { "type": "string", "required": true },
+        "userId": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "message": { "type": "string", "required": true },
+        "type": { "type": "string", "required": true },
+        "createdAt": { "type": "string", "required": true },
+        "isRead": { "type": "boolean", "required": true },
+        "jobId": { "type": "string", "required": false },
+        "candidateId": { "type": "string", "required": false }
       }
     }
   }

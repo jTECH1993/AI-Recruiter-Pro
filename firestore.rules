@@ -2,18 +2,23 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // User profile rule: only the user themselves can read/write their own document
+    // User profile rules & subcollections
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    
-    // Jobs: authenticated recruiters can read and write jobs
-    match /jobs/{jobId} {
       allow read, write: if request.auth != null;
+
+      // Jobs nested under user
+      match /jobs/{jobId} {
+        allow read, write: if request.auth != null;
+      }
+      
+      // Candidates nested under user
+      match /candidates/{candidateId} {
+        allow read, write: if request.auth != null;
+      }
     }
-    
-    // Candidates: authenticated recruiters can read and write candidates
-    match /candidates/{candidateId} {
+
+    // Notifications root collection
+    match /notifications/{notificationId} {
       allow read, write: if request.auth != null;
     }
   }

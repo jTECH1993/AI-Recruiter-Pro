@@ -32,6 +32,11 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
   const [responsibilities, setResponsibilities] = useState("");
   const [benefits, setBenefits] = useState("");
   const [description, setDescription] = useState("");
+  const [thresholdScore, setThresholdScore] = useState<number>(70);
+  const [extraAttributes, setExtraAttributes] = useState<{ attribute: string; bonusScore: number; }[]>([]);
+  const [newAttributeName, setNewAttributeName] = useState("");
+  const [newAttributeScore, setNewAttributeScore] = useState<number>(5);
+  const [endDate, setEndDate] = useState("");
 
   const resetForm = () => {
     setTitle("");
@@ -47,6 +52,11 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
     setResponsibilities("");
     setBenefits("");
     setDescription("");
+    setThresholdScore(70);
+    setExtraAttributes([]);
+    setNewAttributeName("");
+    setNewAttributeScore(5);
+    setEndDate("");
   };
 
   const loadForm = (job: Job) => {
@@ -63,6 +73,11 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
     setResponsibilities(job.responsibilities);
     setBenefits(job.benefits);
     setDescription(job.description);
+    setThresholdScore(job.thresholdScore !== undefined ? job.thresholdScore : 70);
+    setExtraAttributes(job.extraAttributes || []);
+    setNewAttributeName("");
+    setNewAttributeScore(5);
+    setEndDate(job.endDate || "");
   };
 
   const handleCreate = () => {
@@ -86,6 +101,9 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
       responsibilities,
       benefits,
       description,
+      thresholdScore,
+      extraAttributes,
+      endDate,
       createdAt: new Date().toISOString(),
     };
 
@@ -113,6 +131,9 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
       responsibilities,
       benefits,
       description,
+      thresholdScore,
+      extraAttributes,
+      endDate,
     };
 
     onUpdateJob(updatedJob);
@@ -183,7 +204,7 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
       {/* Left: Job Listings Panel (Cols 4) */}
       <div className="lg:col-span-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900 tracking-tight font-display">Active Job Posts ({jobs.length})</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight font-display">Active Job Posts ({jobs.length})</h2>
           <button
             id="add-job-btn"
             onClick={() => {
@@ -202,7 +223,7 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
 
         <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
           {jobs.length === 0 ? (
-            <div className="p-8 text-center bg-white border border-slate-200 rounded-xl text-slate-400 text-xs">
+            <div className="p-8 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-400 dark:text-slate-500 text-xs font-semibold">
               No jobs created yet. Click "Create Job" to define criteria.
             </div>
           ) : (
@@ -218,18 +239,18 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
                 }}
                 className={`p-4 rounded-xl border text-left cursor-pointer transition ${
                   selectedJob?.id === job.id
-                    ? "bg-indigo-50/60 border-indigo-500 shadow-sm"
-                    : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/30"
+                    ? "bg-indigo-50/60 dark:bg-indigo-950/20 border-indigo-500 dark:border-indigo-800 shadow-sm"
+                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/30 dark:hover:bg-slate-850/40"
                 }`}
               >
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="font-bold text-slate-900 text-sm line-clamp-1 font-display">{job.title}</h3>
-                    <p className="text-xs text-slate-500 font-semibold mt-0.5">{job.company}</p>
-                    <p className="text-[10px] text-slate-400 font-mono mt-1.5">{job.location} • {job.type}</p>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-sm line-clamp-1 font-display">{job.title}</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5">{job.company}</p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono mt-1.5">{job.location} • {job.type}</p>
                   </div>
                   {job.analyzedRequirements && (
-                    <span className="text-[9px] bg-indigo-100 text-indigo-700 font-mono font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5 uppercase shrink-0">
+                    <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950/45 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/40 font-mono font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5 uppercase shrink-0">
                       <Cpu className="w-2.5 h-2.5" /> Analyzed
                     </span>
                   )}
@@ -241,12 +262,12 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
       </div>
 
       {/* Right: Job Detail / Form Panel (Cols 8) */}
-      <div className="lg:col-span-8 bg-white border border-slate-200 shadow-sm rounded-2xl p-6 min-h-[500px] flex flex-col">
+      <div className="lg:col-span-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-2xl p-6 min-h-[500px] flex flex-col transition-colors duration-250">
         {isAdding || isEditing ? (
           // Create / Edit Form
           <div className="space-y-6 flex-1 flex flex-col justify-between">
             <div>
-              <h2 className="text-lg font-bold text-slate-900 tracking-tight font-display mb-4">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight font-display mb-4">
                 {isAdding ? "Create New Job Post" : `Modify: ${selectedJob?.title}`}
               </h2>
 
@@ -346,7 +367,18 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
                     value={educationRequired}
                     onChange={(e) => setEducationRequired(e.target.value)}
                     placeholder="e.g. Bachelor's Degree in CS"
-                    className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition shadow-sm"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none transition shadow-sm"
+                  />
+                </div>
+
+                {/* Job End Date */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Job Posting End Date *</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none transition shadow-sm"
                   />
                 </div>
               </div>
@@ -419,6 +451,98 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
                     placeholder="Enter company perks and benefits..."
                     className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition font-sans shadow-sm"
                   />
+                </div>
+
+                {/* Advanced Threshold & Bonus Evaluation Rules */}
+                <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 space-y-4">
+                  <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
+                    <Award className="w-4 h-4 text-indigo-600" />
+                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-display">Evaluation Standards & Bonus Rules</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Passing Score Threshold */}
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Passing Score Threshold (%)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={thresholdScore}
+                          onChange={(e) => setThresholdScore(Number(e.target.value))}
+                          className="w-32 bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-1.5 text-sm text-slate-900 font-bold focus:outline-none transition shadow-sm"
+                        />
+                        <span className="text-[11px] text-slate-400 font-medium">Candidates below this are flagged as Reject/Consider.</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Extra Bonus Attributes */}
+                  <div className="space-y-3 pt-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Custom Bonus Attributes (Optional)</label>
+                      <p className="text-[10px] text-slate-400 mb-2">Define custom traits or academic degrees (e.g. "Ph.D. in CS", "Stripe payment integration"). If Agent 11 finds them, they award the bonus points.</p>
+                    </div>
+
+                    {/* Added List */}
+                    {extraAttributes.length > 0 && (
+                      <div className="space-y-1.5 bg-white border border-slate-200 rounded-lg p-2.5 max-h-40 overflow-y-auto shadow-inner">
+                        {extraAttributes.map((attr, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-slate-50 px-2.5 py-1.5 rounded-md border border-slate-100 text-xs text-slate-700">
+                            <span className="font-semibold flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                              {attr.attribute}
+                            </span>
+                            <div className="flex items-center gap-3">
+                              <span className="bg-emerald-50 text-emerald-700 font-bold font-mono px-2 py-0.5 rounded text-[10px]">+{attr.bonusScore} pts</span>
+                              <button
+                                type="button"
+                                onClick={() => setExtraAttributes(extraAttributes.filter((_, i) => i !== idx))}
+                                className="text-slate-400 hover:text-rose-600 font-bold transition text-[11px]"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Input to Add */}
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        value={newAttributeName}
+                        onChange={(e) => setNewAttributeName(e.target.value)}
+                        placeholder="e.g. Docker and Kubernetes expertise"
+                        className="flex-1 bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:outline-none transition shadow-sm"
+                      />
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={newAttributeScore}
+                          onChange={(e) => setNewAttributeScore(Number(e.target.value))}
+                          className="bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-2 py-1.5 text-xs text-slate-900 font-bold focus:outline-none transition shadow-sm"
+                        >
+                          <option value="3">3 pts</option>
+                          <option value="5">5 pts</option>
+                          <option value="10">10 pts</option>
+                          <option value="15">15 pts</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newAttributeName.trim()) return;
+                            setExtraAttributes([...extraAttributes, { attribute: newAttributeName.trim(), bonusScore: newAttributeScore }]);
+                            setNewAttributeName("");
+                          }}
+                          className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg border border-indigo-150 transition text-xs shrink-0"
+                        >
+                          Add Rule
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -534,7 +658,7 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
 
             {activeJobTab === "specs" ? (
               <div className="space-y-5 flex-1">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-left">
                   {/* Salary */}
                   <div className="bg-slate-50/50 border border-slate-200/60 p-3.5 rounded-xl shadow-inner">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Salary Range</p>
@@ -549,6 +673,11 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
                   <div className="bg-slate-50/50 border border-slate-200/60 p-3.5 rounded-xl shadow-inner">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Education Required</p>
                     <p className="text-sm font-extrabold text-slate-900 mt-1 truncate font-display">{selectedJob.educationRequired}</p>
+                  </div>
+                  {/* End Date */}
+                  <div className="bg-slate-50/50 border border-slate-200/60 p-3.5 rounded-xl shadow-inner">
+                    <p className="text-[9px] font-bold text-rose-500 uppercase tracking-wider">Application End Date</p>
+                    <p className="text-sm font-extrabold text-slate-900 mt-1 font-display">{selectedJob.endDate ? selectedJob.endDate : "No End Date Set"}</p>
                   </div>
                 </div>
 
@@ -594,6 +723,47 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob, onDeleteJob }:
                       <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line font-sans font-medium">{selectedJob.responsibilities}</p>
                     </div>
                   )}
+
+                  {/* Standards & Extra Attribute rules */}
+                  <div className="bg-slate-50/50 border border-slate-200/60 p-4 rounded-xl space-y-4">
+                    <h4 className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5 font-display">
+                      <Award className="w-3.5 h-3.5 text-indigo-600" /> Recruiter Passing Standards & Bonus Rules
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Threshold Box */}
+                      <div className="bg-white border border-slate-200/80 rounded-lg p-3 text-left">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Candidate Passing Threshold</span>
+                        <div className="flex items-baseline gap-1 mt-1">
+                          <span className="text-lg font-black text-indigo-600 font-display">{selectedJob.thresholdScore !== undefined ? selectedJob.thresholdScore : 70}%</span>
+                          <span className="text-[10px] text-slate-400 font-semibold font-sans">minimum evaluation score</span>
+                        </div>
+                      </div>
+
+                      {/* Attributes Box */}
+                      <div className="bg-white border border-slate-200/80 rounded-lg p-3 text-left">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Custom Bonus Rules Configured</span>
+                        <div className="flex items-baseline gap-1 mt-1">
+                          <span className="text-lg font-black text-indigo-600 font-display">{selectedJob.extraAttributes?.length || 0}</span>
+                          <span className="text-[10px] text-slate-400 font-semibold font-sans">bonus verification attribute{selectedJob.extraAttributes?.length === 1 ? '' : 's'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {selectedJob.extraAttributes && selectedJob.extraAttributes.length > 0 && (
+                      <div className="pt-1 space-y-1.5 text-left">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Configured Attributes:</span>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedJob.extraAttributes.map((attr, i) => (
+                            <div key={i} className="flex items-center gap-2 bg-white border border-slate-200/80 rounded-lg px-2.5 py-1 text-xs shadow-sm">
+                              <span className="font-semibold text-slate-700">{attr.attribute}</span>
+                              <span className="bg-indigo-100 text-indigo-800 font-bold font-mono text-[9px] px-1.5 py-0.5 rounded">+{attr.bonusScore} pts</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : (

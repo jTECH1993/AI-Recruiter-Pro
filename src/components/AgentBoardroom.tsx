@@ -24,7 +24,7 @@ export default function AgentBoardroom({ job, candidate, onEvaluationComplete, o
   const [currentStep, setCurrentStep] = useState(-1);
   const [logs, setLogs] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const terminalEndRef = useRef<HTMLDivElement>(null);
+  const terminalContainerRef = useRef<HTMLDivElement>(null);
 
   const agents = [
     {
@@ -82,6 +82,24 @@ export default function AgentBoardroom({ job, candidate, onEvaluationComplete, o
       description: "Generates tailored technical and behavioral interview questions.",
     },
     {
+      id: "agent-culture",
+      name: "Cultural Fit & Soft Skills Agent",
+      role: "Culture Specialist",
+      avatar: "🤝",
+      color: "bg-cyan-600 text-white",
+      borderColor: "border-cyan-500",
+      description: "Evaluates teamwork, adaptability, growth mindset, and alignment with high-performance team culture.",
+    },
+    {
+      id: "agent-bonus",
+      name: "Extra Attributes & Bonus Evaluator Agent",
+      role: "Bonus Evaluator Specialist",
+      avatar: "🏅",
+      color: "bg-orange-600 text-white",
+      borderColor: "border-orange-500",
+      description: "Checks resumes for optional recruiter attributes and awards extra bonus points dynamically.",
+    },
+    {
       id: "agent-manager",
       name: "Hiring Decision Agent",
       role: "Hiring Manager",
@@ -102,8 +120,11 @@ export default function AgentBoardroom({ job, candidate, onEvaluationComplete, o
   ];
 
   useEffect(() => {
-    if (terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (terminalContainerRef.current) {
+      terminalContainerRef.current.scrollTo({
+        top: terminalContainerRef.current.scrollHeight,
+        behavior: "smooth"
+      });
     }
   }, [logs]);
 
@@ -303,28 +324,66 @@ export default function AgentBoardroom({ job, candidate, onEvaluationComplete, o
         report.interviewQuestions
       );
 
-      // Step 7: Hiring Manager
+      // Step 7: Culture Specialist
       await sleep(1500);
       setCurrentStep(7);
+      addLog(
+        "Cultural Fit & Soft Skills Agent",
+        "Culture Specialist",
+        "bg-cyan-600 text-white",
+        `Reviewing applicant emotional intelligence, soft skills match, and high-performance engineering teamwork alignment...`
+      );
+      await sleep(1500);
+      addLog(
+        "Cultural Fit & Soft Skills Agent",
+        "Culture Specialist",
+        "bg-cyan-600 text-white",
+        `Cultural Alignment Score: ${report.cultureFitEvaluation?.score || 85}/100. Core matches: [${(report.cultureFitEvaluation?.soft_skills_match || ["Team Leadership", "Proactive Mindset"]).join(", ")}].`,
+        true,
+        report.cultureFitEvaluation || { score: 85, alignment_reasons: [], soft_skills_match: [] }
+      );
+
+      // Step 8: Bonus Evaluator Specialist
+      await sleep(1500);
+      setCurrentStep(8);
+      addLog(
+        "Extra Attributes & Bonus Evaluator Agent",
+        "Bonus Evaluator Specialist",
+        "bg-orange-600 text-white",
+        `Scanning candidate resume files for user-specified custom bonus attributes...`
+      );
+      await sleep(1500);
+      addLog(
+        "Extra Attributes & Bonus Evaluator Agent",
+        "Bonus Evaluator Specialist",
+        "bg-orange-600 text-white",
+        `Custom bonus scan complete! Bonus Points Awarded: +${report.extraAttributesEvaluation?.score_bonus_awarded || 0} points. Found: ${report.extraAttributesEvaluation?.attributes_found?.length || 0} matching rules.`,
+        true,
+        report.extraAttributesEvaluation || { score_bonus_awarded: 0, attributes_found: [] }
+      );
+
+      // Step 9: Hiring Manager
+      await sleep(1500);
+      setCurrentStep(9);
       addLog(
         "Hiring Decision Agent",
         "Hiring Manager",
         "bg-rose-600 text-white",
-        `Taking the final review stand. Combining assessments to frame hiring conclusion...`
+        `Taking the final review stand. Combining baseline assessment metrics, cultural fit alignment, and custom recruiter bonus rules to construct final recommendation...`
       );
       await sleep(1800);
       addLog(
         "Hiring Decision Agent",
         "Hiring Manager",
         "bg-rose-600 text-white",
-        `RECOMMENDATION: ${report.hiringRecommendation?.recommendation.toUpperCase()} (Score: ${report.hiringRecommendation?.match_score}/100). Confidence: ${report.hiringRecommendation?.confidence_score}%.`,
+        `RECOMMENDATION: ${report.hiringRecommendation?.recommendation.toUpperCase()} (Total Final Score: ${report.hiringRecommendation?.match_score}/100, Passing Threshold: ${job.thresholdScore !== undefined ? job.thresholdScore : 70}%). Confidence: ${report.hiringRecommendation?.confidence_score}%.`,
         true,
         report.hiringRecommendation
       );
 
-      // Step 8: HR Coordinator
+      // Step 10: HR Coordinator
       await sleep(1500);
-      setCurrentStep(8);
+      setCurrentStep(10);
       addLog(
         "HR Communication Agent",
         "HR Coordinator",
@@ -349,6 +408,7 @@ export default function AgentBoardroom({ job, candidate, onEvaluationComplete, o
         "🚀 Multi-Agent execution completed. Integrating report modules into HR database... Done."
       );
 
+      setCurrentStep(11);
       setPipelineRunning(false);
       setTimeout(() => {
         onEvaluationComplete(report);
@@ -409,7 +469,7 @@ export default function AgentBoardroom({ job, candidate, onEvaluationComplete, o
           <div className="space-y-3">
             {agents.map((agent, index) => {
               const isCurrent = currentStep === index + 1;
-              const isDone = currentStep > index + 1 || currentStep === 9;
+              const isDone = currentStep > index + 1 || currentStep === 11;
               const isSkipped = currentStep === -2 && index + 1 > 2; // Compliance rejected, rest skipped
 
               return (
@@ -465,7 +525,7 @@ export default function AgentBoardroom({ job, candidate, onEvaluationComplete, o
           </div>
 
           {/* Terminal Stream */}
-          <div className="flex-1 p-4 overflow-y-auto space-y-4 font-mono text-xs text-slate-300">
+          <div ref={terminalContainerRef} className="flex-1 p-4 overflow-y-auto space-y-4 font-mono text-xs text-slate-300">
             {logs.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-slate-500">
                 <MessageSquare className="w-12 h-12 text-slate-700 mb-2" />
@@ -505,8 +565,6 @@ export default function AgentBoardroom({ job, candidate, onEvaluationComplete, o
                 </div>
               </div>
             )}
-
-            <div ref={terminalEndRef} />
           </div>
 
           {/* Prompt Simulation Box */}
@@ -515,10 +573,10 @@ export default function AgentBoardroom({ job, candidate, onEvaluationComplete, o
             <div className="flex-1 text-slate-400 font-mono truncate">
               {pipelineRunning ? (
                 <span>
-                  Agent {currentStep} of 8 executing...{" "}
+                  Agent {currentStep} of 10 executing...{" "}
                   <span className="inline-block w-2 h-4 bg-indigo-400 animate-pulse align-middle ml-1" />
                 </span>
-              ) : currentStep === 9 ? (
+              ) : currentStep === 11 ? (
                 <span className="text-emerald-400 font-bold">✓ Multi-agent assessment successfully completed!</span>
               ) : currentStep === -2 ? (
                 <span className="text-rose-400 font-bold">🛑 Compliance check failed. Process halted.</span>
